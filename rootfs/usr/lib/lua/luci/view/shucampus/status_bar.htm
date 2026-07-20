@@ -1,0 +1,85 @@
+<%#
+Status bar on top of the settings page (tailscale-style).
+Also drives the "Login Status" DummyValue inside the form.
+-%>
+
+<div class="cbi-section" id="status_bar">
+    <p id="shu_service_status"><em><%:Collecting data ...%></em></p>
+    <p style="margin:0">
+        <a href="javascript:shuRestart()"><%:Restart Daemon%></a>
+    </p>
+</div>
+
+<script type="text/javascript">//<![CDATA[
+var SHU_API = '<%=luci.dispatcher.build_url("admin","services","shucampus","api")%>';
+
+function shuParse(data) {
+    if (typeof data === 'object' && data !== null) return data;
+    try { return JSON.parse(data); } catch (e) { return null; }
+}
+
+function shuCall(action, done) {
+    XHR.get(SHU_API + '/' + action, null, function() {
+        if (done) done();
+        setTimeout(shuPollStatus, 1500);
+    });
+}
+
+function shuRestart() { shuCall('restart'); }
+function shuLogin()   { shuCall('login'); }
+function shuLogout()  { shuCall('logout'); }
+
+function shuRenderService(running) {
+    var color = running ? 'green' : 'red';
+    var text  = running ? '<%:RUNNING%>' : '<%:NOT RUNNING%>';
+    return '<em><span style="color:' + color + '"><strong>' +
+           '<%:Campus Network%>' + ' ' + text + '</strong></span></em>';
+}
+
+function shuRenderLogin(s) {
+    switch (s.state) {
+    case 'online':
+        return '<span style="color:green"><strong><%:Connected%></strong></span>' +
+               (s.uptime ? ' <span style="color:#666">(' + s.uptime + ')</span>' : '') +
+               '<br><a style="color:green" href="javascript:shuLogout()"><%:Disconnect%></a>';
+    case 'authenticating':
+        return '<span style="color:orange"><%:Authenticating...%></span>';
+    case 'waiting':
+        return '<span style="color:orange"><%:Waiting for NAS...%></span>';
+    case 'auth_failed':
+        return '<span style="color:red"><strong><%:Auth Failed%></strong>' +
+               (s.state_msg ? ': ' + s.state_msg : '') + '</span>' +
+               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+    case 'offline':
+        return '<span style="color:red"><%:Offline%></span>' +
+               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+    case 'disabled':
+        return '<span style="color:#888"><%:Disabled%></span>';
+    case 'stopped':
+        return '<span style="color:#888"><%:Not Running%></span>';
+    case 'suppressed':
+        return '<span style="color:#888"><%:Manually Disconnected%></span>' +
+               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+    default:
+        return '<span style="color:orange"><%:Unknown%></span>' +
+               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+    }
+}
+
+function shuPollStatus() {
+    XHR.get(SHU_API + '/status', null, function(x, data) {
+        var s = shuParse(data);
+        if (!s) return;
+
+        var running = (s.daemon_running === true || s.daemon_running === 'true');
+        var svcEl = document.getElementById('shu_service_status');
+        if (svcEl) svcEl.innerHTML = shuRenderService(running && s.enabled === '1');
+
+        var loginEl = document.getElementById('shu_login_status');
+        if (loginEl) loginEl.innerHTML = shuRenderLogin(s);
+    });
+}
+
+setTimeout(shuPollStatus, 300);
+setInterval(shuPollStatus, 5000);
+//]]></script>

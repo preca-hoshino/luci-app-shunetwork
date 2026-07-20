@@ -1,4 +1,5 @@
-m = Map("shucampus", translate("Campus Network"))
+m = Map("shucampus", translate("Campus Network"),
+    translate("Ruijie SAM+ portal authentication client."))
 m.pageaction = false
 
 s = m:section(SimpleSection)

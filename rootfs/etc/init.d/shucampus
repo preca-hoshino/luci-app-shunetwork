@@ -23,6 +23,9 @@ _start_service() {
 }
 
 start_service() {
+    # Explicit service start/restart = admin intent: clear any manual
+    # disconnect suppression (procd respawn does not pass through here).
+    rm -f /var/run/shucampus_suppress
     _setup_interface
     _start_service
 }
@@ -39,9 +42,11 @@ service_triggers() {
 }
 
 reload_service() {
-    stop_service
-    sleep 1
-    start_service
+    # rc.common stop/start: procd kills the tracked process on stop.
+    # (stop_service above is only a hook - calling it directly would NOT
+    # terminate the daemon, leaving the old process running old config.)
+    stop
+    start
 }
 
 login() {
@@ -81,15 +86,18 @@ _setup_interface() {
     target="${cidr%/*}"
     mask="${cidr#*/}"
 
+    # Create the interface when missing, and always enforce the critical
+    # fields: a stale hand-made config (e.g. device=campus -> NO_DEVICE)
+    # silently breaks DHCP and the whole auth chain.
     if ! uci -q get network."$iface" >/dev/null 2>&1; then
-        uci -q batch <<-EOF
-			set network.$iface=interface
-			set network.$iface.device=wan
-			set network.$iface.proto=dhcp
-			set network.$iface.gateway=0.0.0.0
-		EOF
-        uci commit network
+        uci set network."$iface"=interface
     fi
+    uci -q batch <<-EOF
+		set network.$iface.device=wan
+		set network.$iface.proto=dhcp
+		set network.$iface.gateway=0.0.0.0
+	EOF
+    uci commit network
 
     local route_exists=0
     _check_route() {

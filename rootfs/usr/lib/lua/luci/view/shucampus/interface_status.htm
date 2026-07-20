@@ -1,95 +1,54 @@
 <%#
-LuCI - Lua Configuration Interface
-Campus network interface status panel
+Interface info page: pure read-only network data table (tailscale-style).
+No action buttons here.
 -%>
 
-<div class="cbi-section" style="padding:12px;margin-bottom:16px">
-    <h3 style="margin-top:0"><%:Connection Status%></h3>
-
-    <div style="margin:10px 0 16px 0">
-        <span id="shu_state" class="label" style="font-size:14px;padding:6px 14px"><%:Loading...%></span>
-        <span id="shu_state_msg" style="margin-left:10px;color:#c00"></span>
-    </div>
-
-    <table class="table" style="width:auto">
-        <tr>
-            <td style="width:160px;font-weight:bold"><%:Daemon%></td>
-            <td><span id="shu_daemon">-</span></td>
-        </tr>
-        <tr>
-            <td style="font-weight:bold"><%:Campus IP%></td>
-            <td><span id="shu_ip">-</span></td>
-        </tr>
-        <tr>
-            <td style="font-weight:bold"><%:Online Since%></td>
-            <td><span id="shu_uptime">-</span></td>
-        </tr>
-        <tr>
-            <td style="font-weight:bold"><%:Session ID%></td>
-            <td><span id="shu_session" style="font-family:monospace;font-size:11px">-</span></td>
-        </tr>
-    </table>
-
-    <div style="margin-top:14px">
-        <button class="btn cbi-button cbi-button-apply" onclick="shuAction('login')"><%:Login Now%></button>
-        <button class="btn cbi-button cbi-button-reset" onclick="shuAction('logout')"><%:Disconnect%></button>
-        <button class="btn cbi-button cbi-button-reload" onclick="shuAction('restart')"><%:Restart Daemon%></button>
-    </div>
-</div>
+<div id="shu_ifinfo"><em><%:Loading...%></em></div>
 
 <script type="text/javascript">//<![CDATA[
-var STATUS_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","status")%>';
-var API_BASE   = '<%=luci.dispatcher.build_url("admin","services","shucampus","api")%>';
-
-var STATE_MAP = {
-    disabled:       { text: '<%:Disabled%>',          cls: 'label' },
-    stopped:        { text: '<%:Not Running%>',       cls: 'label' },
-    authenticating: { text: '<%:Authenticating...%>', cls: 'label label-warning' },
-    waiting:        { text: '<%:Waiting for NAS...%>',cls: 'label label-warning' },
-    online:         { text: '<%:Connected%>',         cls: 'label label-success' },
-    auth_failed:    { text: '<%:Auth Failed%>',       cls: 'label label-danger' },
-    offline:        { text: '<%:Offline%>',           cls: 'label label-danger' }
-};
+var SHU_IF_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","ifstatus")%>';
 
 function shuParse(data) {
-    // LuCI XHR auto-parses application/json into an object; older
-    // versions pass raw text. Handle both.
     if (typeof data === 'object' && data !== null) return data;
     try { return JSON.parse(data); } catch (e) { return null; }
 }
 
-function shuUpdateStatus() {
-    XHR.get(STATUS_URL, null, function(x, data) {
-        var s = shuParse(data);
-        if (!s) return;
+function shuFmtBytes(b) {
+    b = Number(b) || 0;
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+    if (b >= 1048576)    return (b / 1048576).toFixed(2) + ' MB';
+    if (b >= 1024)       return (b / 1024).toFixed(2) + ' KB';
+    return b + ' B';
+}
 
-        var info = STATE_MAP[s.state] || { text: s.state || '<%:Unknown%>', cls: 'label' };
-        var el = document.getElementById('shu_state');
-        el.textContent = info.text;
-        el.className = info.cls;
-        el.style.fontSize = '14px';
-        el.style.padding = '6px 14px';
+function shuRow(label, value) {
+    return '<tr class="tr"><td class="td left" width="25%">' + label + '</td>' +
+           '<td class="td left" width="25%">' + (value || '-') + '</td></tr>';
+}
 
-        document.getElementById('shu_state_msg').textContent = s.state_msg || '';
-        document.getElementById('shu_daemon').textContent =
-            (s.daemon_running === true || s.daemon_running === 'true')
-                ? '<%:Running%>' : '<%:Stopped%>';
-        document.getElementById('shu_ip').textContent = s.campus_ip || '-';
-        document.getElementById('shu_uptime').textContent = s.uptime || '-';
+function shuRenderIfinfo(s) {
+    var el = document.getElementById('shu_ifinfo');
+    if (!s || !s.name) {
+        el.innerHTML = '<div><%:No interface online.%></div>';
+        return;
+    }
+    el.innerHTML =
+        '<table class="table">' +
+        '<tr class="tr"><th class="th" colspan="2"><%:Network Interface Information%></th></tr>' +
+        shuRow('<%:Interface Name%>', s.name) +
+        shuRow('<%:IPv4 Address%>', s.ipv4) +
+        shuRow('<%:MTU%>', s.mtu) +
+        shuRow('<%:Total Download%>', shuFmtBytes(s.rx_bytes)) +
+        shuRow('<%:Total Upload%>', shuFmtBytes(s.tx_bytes)) +
+        '</table>';
+}
 
-        var sess = s.user_index || '-';
-        if (sess.length > 24) sess = sess.substr(0, 24) + '...';
-        document.getElementById('shu_session').textContent = sess;
-        if (s.user_index) document.getElementById('shu_session').title = s.user_index;
+function shuPollIfinfo() {
+    XHR.get(SHU_IF_URL, null, function(x, data) {
+        shuRenderIfinfo(shuParse(data));
     });
 }
 
-function shuAction(action) {
-    XHR.get(API_BASE + '/' + action, null, function() {
-        setTimeout(shuUpdateStatus, 1500);
-    });
-}
-
-setTimeout(shuUpdateStatus, 300);
-setInterval(shuUpdateStatus, 5000);
+setTimeout(shuPollIfinfo, 300);
+setInterval(shuPollIfinfo, 5000);
 //]]></script>

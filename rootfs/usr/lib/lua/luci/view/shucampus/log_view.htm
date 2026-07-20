@@ -1,66 +1,47 @@
 <%#
-LuCI - Lua Configuration Interface
-Campus network log viewer
+Log viewer page: textarea with scroll-to-tail/head buttons (tailscale-style).
 -%>
 
-<div class="cbi-section" style="padding:12px;margin-bottom:16px">
-    <h3 style="margin-top:0"><%:Daemon Log%></h3>
+<div style="padding-bottom:20px">
+    <button class="cbi-button cbi-button-neutral" id="shu_btn_tail"><%:Scroll to tail%></button>
+    <button class="cbi-button cbi-button-reset" onclick="shuClearLog()"><%:Clear Log%></button>
+</div>
 
-    <div style="margin-bottom:8px">
-        <button class="btn cbi-button cbi-button-apply" onclick="shuRefreshLog(true)"><%:Refresh%></button>
-        <button class="btn cbi-button cbi-button-reset" onclick="shuClearLog()"><%:Clear Log%></button>
-        <label style="margin-left:12px">
-            <input type="checkbox" id="shu_autorefresh" checked onclick="shuToggleAuto()"/>
-            <%:Auto Refresh%>
-        </label>
-    </div>
+<textarea id="shu_log" readonly="readonly" wrap="off" rows="20"
+    style="width:100%;font-size:12px"><%:Loading...%></textarea>
 
-    <pre id="shu_log" style="width:100%;height:420px;overflow:auto;background:#1e1e1e;color:#ddd;font-family:monospace;font-size:11px;padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all"><%:Loading...%></pre>
+<div style="padding-bottom:20px">
+    <button class="cbi-button cbi-button-neutral" id="shu_btn_head"><%:Scroll to head%></button>
 </div>
 
 <script type="text/javascript">//<![CDATA[
-var LOG_URL   = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log")%>';
-var CLEAR_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log_clear")%>';
-var shuTimer = null;
+var SHU_LOG_URL   = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log")%>';
+var SHU_CLEAR_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log_clear")%>';
 
-function shuEscape(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+// tailscale-style: the two buttons jump the page between each other
+document.getElementById('shu_btn_tail').addEventListener('click', function() {
+    document.getElementById('shu_btn_head').scrollIntoView();
+});
+document.getElementById('shu_btn_head').addEventListener('click', function() {
+    document.getElementById('shu_btn_tail').scrollIntoView();
+});
 
-// Colorize [INFO]/[WARN]/[ERROR] level tags
-function shuColorize(text) {
-    return shuEscape(text).split('\n').map(function(line) {
-        if (line.indexOf('[ERROR]') !== -1) return '<span style="color:#ff6b6b">' + line + '</span>';
-        if (line.indexOf('[WARN]')  !== -1) return '<span style="color:#ffd43b">' + line + '</span>';
-        return '<span style="color:#8ce99a">' + line + '</span>';
-    }).join('\n');
-}
-
-function shuRefreshLog(manual) {
-    XHR.get(LOG_URL, null, function(x, data) {
+function shuPollLog() {
+    XHR.get(SHU_LOG_URL, null, function(x, data) {
         var el = document.getElementById('shu_log');
         var text = (typeof data === 'string' && data.length) ? data : '(empty)';
-        el.innerHTML = shuColorize(text);
-        el.scrollTop = el.scrollHeight;
+        el.value = text;
+        var lines = text.trim().split(/\n/).length;
+        el.rows = Math.min(lines + 1, 100);
     });
 }
 
 function shuClearLog() {
-    XHR.get(CLEAR_URL, null, function() {
-        shuRefreshLog(true);
+    XHR.get(SHU_CLEAR_URL, null, function() {
+        shuPollLog();
     });
 }
 
-function shuToggleAuto() {
-    var on = document.getElementById('shu_autorefresh').checked;
-    if (on && !shuTimer) {
-        shuTimer = setInterval(shuRefreshLog, 5000);
-    } else if (!on && shuTimer) {
-        clearInterval(shuTimer);
-        shuTimer = null;
-    }
-}
-
-setTimeout(shuRefreshLog, 300);
-shuTimer = setInterval(shuRefreshLog, 5000);
+setTimeout(shuPollLog, 300);
+setInterval(shuPollLog, 5000);
 //]]></script>

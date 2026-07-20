@@ -27,6 +27,9 @@ function index()
     entry({"admin", "services", "shucampus", "api", "status"},
         call("action_status"))
 
+    entry({"admin", "services", "shucampus", "api", "ifstatus"},
+        call("action_ifstatus"))
+
     entry({"admin", "services", "shucampus", "api", "log"},
         call("action_log"))
 
@@ -54,6 +57,37 @@ end
 function action_log()
     http.prepare_content("text/plain; charset=utf-8")
     http.write(luci.sys.exec("tail -n 300 " .. LOGFILE .. " 2>/dev/null"))
+end
+
+-- Network interface data for the info page (from `ip -s -j addr`).
+-- Prefers the campus (10.x) IPv4 address, falls back to the first inet one.
+function action_ifstatus()
+    http.prepare_content("application/json")
+    local json = require "luci.jsonc"
+    local raw = luci.sys.exec("ip -s -j addr show dev wan 2>/dev/null")
+    local data = json.parse(raw)
+    local result = {}
+    if type(data) == "table" and type(data[1]) == "table" then
+        local dev = data[1]
+        result.name = dev.ifname
+        result.mtu = dev.mtu
+        local first4, campus4
+        for _, a in ipairs(dev.addr_info or {}) do
+            local addr = a["local"]   -- "local" is a reserved word in Lua
+            if a.family == "inet" then
+                first4 = first4 or addr
+                if type(addr) == "string" and addr:match("^10%.") then
+                    campus4 = addr
+                end
+            end
+        end
+        result.ipv4 = campus4 or first4
+        if type(dev.stats64) == "table" then
+            result.rx_bytes = dev.stats64.rx and dev.stats64.rx.bytes
+            result.tx_bytes = dev.stats64.tx and dev.stats64.tx.bytes
+        end
+    end
+    http.write(json.stringify(result))
 end
 
 function action_log_clear()
