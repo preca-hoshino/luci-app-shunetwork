@@ -3,9 +3,22 @@
 LOGFILE=/var/log/shucampus.log
 PIDFILE=/var/run/shucampus_index
 UPTIME_FILE=/var/run/shucampus_uptime
+STATE_FILE=/var/run/shucampus_state
+MSG_FILE=/var/run/shucampus_msg
 
 _uci() {
     uci -q get shucampus.@campus[0]."$1" 2>/dev/null || echo ""
+}
+
+# Persist daemon state for the status API. $1=state, optional $2=portal message
+set_state() {
+    echo "$1" > "$STATE_FILE"
+    [ $# -ge 2 ] && echo "$2" > "$MSG_FILE"
+    return 0
+}
+
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 USERNAME=$(_uci username)
@@ -16,8 +29,18 @@ GATEWAY=$(_uci gateway)
 KEEPALIVE=$(_uci keepalive)
 [ -z "$KEEPALIVE" ] && KEEPALIVE=120
 
+# log [LEVEL] message...  (LEVEL defaults to INFO)
+# Rotates the log at ~64KB, keeping the last 200 lines.
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE"
+    local level=INFO sz
+    case "${1:-}" in
+        INFO|WARN|ERROR) level=$1; shift ;;
+    esac
+    sz=$(wc -c < "$LOGFILE" 2>/dev/null || echo 0)
+    if [ "${sz:-0}" -gt 65536 ]; then
+        tail -n 200 "$LOGFILE" > "$LOGFILE.tmp" 2>/dev/null && mv "$LOGFILE.tmp" "$LOGFILE"
+    fi
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >> "$LOGFILE"
 }
 
 get_query_string() {
@@ -79,32 +102,47 @@ recover_online_session() {
     return 1
 }
 
+# Extract "message" field from a portal JSON reply
+portal_msg() {
+    echo "$1" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4
+}
+
 login_once() {
-    local qs resp user_index
+    local qs resp user_index msg
+    set_state "authenticating"
     qs=$(get_query_string)
-    [ -z "$qs" ] && { log "ERROR: cannot get query string"; return 1; }
+    if [ -z "$qs" ]; then
+        set_state "waiting" "no captive-portal redirect (already online or NAS unreachable)"
+        log WARN "cannot get query string"
+        return 1
+    fi
     resp=$(do_login "$qs")
     user_index=$(echo "$resp" | grep -o '"userIndex":"[^"]*"' | cut -d'"' -f4)
     if [ -n "$user_index" ]; then
         echo "$user_index" > "$PIDFILE"
         date '+%s' > "$UPTIME_FILE"
-        log "Login OK  userIndex=${user_index}"
+        set_state "online"
+        log INFO "Login OK  userIndex=${user_index}"
         return 0
     else
-        log "Login FAIL: $resp"
+        msg=$(portal_msg "$resp")
+        [ -z "$msg" ] && msg=$(echo "$resp" | tr -d '\r\n' | cut -c1-120)
+        set_state "auth_failed" "$msg"
+        log ERROR "Login FAIL: $msg"
         return 1
     fi
 }
 
 daemon_loop() {
-    local idx ka
+    local idx ka msg
     idx=$(cat "$PIDFILE" 2>/dev/null)
     if [ -n "$idx" ]; then
         ka=$(do_keepalive "$idx")
         if echo "$ka" | grep -q "success"; then
-            log "Resumed session  userIndex=${idx}"
+            set_state "online"
+            log INFO "Resumed session  userIndex=${idx}"
         else
-            log "Previous session expired"
+            log WARN "Previous session expired"
             idx=""
             rm -f "$PIDFILE" "$UPTIME_FILE"
         fi
@@ -115,12 +153,15 @@ daemon_loop() {
     # hammering the captive-portal redirect which never fires while online.
     if [ -z "$idx" ]; then
         idx=$(recover_online_session)
-        [ -n "$idx" ] && log "Adopted portal session  userIndex=${idx}"
+        if [ -n "$idx" ]; then
+            set_state "online"
+            log INFO "Adopted portal session  userIndex=${idx}"
+        fi
     fi
 
     while true; do
         if [ -z "$idx" ]; then
-            log "Attempting login..."
+            log INFO "Attempting login..."
             if login_once; then
                 idx=$(cat "$PIDFILE" 2>/dev/null)
             else
@@ -128,7 +169,8 @@ daemon_loop() {
                 # does not intercept. Re-check before the retry wait.
                 idx=$(recover_online_session)
                 if [ -n "$idx" ]; then
-                    log "Adopted portal session  userIndex=${idx}"
+                    set_state "online"
+                    log INFO "Adopted portal session  userIndex=${idx}"
                 else
                     sleep 30
                     continue
@@ -139,9 +181,12 @@ daemon_loop() {
         sleep "${KEEPALIVE:-120}"
         ka=$(do_keepalive "$idx")
         if echo "$ka" | grep -q "success"; then
-            log "Keepalive OK"
+            set_state "online"
+            log INFO "Keepalive OK"
         else
-            log "Keepalive FAIL: $ka"
+            msg=$(portal_msg "$ka")
+            set_state "offline" "$msg"
+            log WARN "Keepalive FAIL: ${msg:-$ka}"
             idx=""
             rm -f "$PIDFILE" "$UPTIME_FILE"
         fi
@@ -165,13 +210,22 @@ case "${1:-}" in
         daemon_loop
         ;;
     login)
+        # If the portal already holds a session for this WAN IP, adopt it
+        # instead of forcing a re-auth (which would flap the state to
+        # "waiting" until the next keepalive fixes it).
+        idx=$(recover_online_session)
+        if [ -n "$idx" ]; then
+            set_state "online"
+            log INFO "Already online, adopted session  userIndex=${idx}"
+            exit 0
+        fi
         login_once
         ;;
     logout)
         idx=$(cat "$PIDFILE" 2>/dev/null)
         [ -n "$idx" ] && do_logout "$idx" >/dev/null 2>&1
-        rm -f "$PIDFILE" "$UPTIME_FILE"
-        log "Logged out"
+        rm -f "$PIDFILE" "$UPTIME_FILE" "$STATE_FILE" "$MSG_FILE"
+        log INFO "Logged out"
         ;;
     online)
         resp=$(get_query_string)
@@ -185,15 +239,34 @@ case "${1:-}" in
         enabled=$(_uci enabled)
         [ -z "$enabled" ] && enabled=0
         idx=""
+        msg=""
+        state=""
         daemon_running=false
         campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
         pgrep -f "shucampus_core.sh daemon" >/dev/null 2>&1 && daemon_running=true
         [ -s "$PIDFILE" ] && read -r idx < "$PIDFILE"
+
+        # State machine: disabled > stopped > persisted state > inferred
+        if [ "$enabled" != "1" ]; then
+            state="disabled"
+        elif [ "$daemon_running" != "true" ]; then
+            state="stopped"
+        elif [ -s "$STATE_FILE" ]; then
+            read -r state < "$STATE_FILE"
+        elif [ -n "$idx" ]; then
+            state="online"
+        else
+            state="authenticating"
+        fi
+
+        [ -s "$MSG_FILE" ] && read -r msg < "$MSG_FILE"
         [ -s "$UPTIME_FILE" ] && read -r uptime < "$UPTIME_FILE" && uptime=$(date -d "@$uptime" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-        printf '{"enabled":"%s","campus_ip":"%s","daemon_running":%s' \
-            "$enabled" "${campus_ip:-}" "$daemon_running"
+
+        printf '{"enabled":"%s","daemon_running":%s,"state":"%s","campus_ip":"%s"' \
+            "$enabled" "$daemon_running" "$state" "${campus_ip:-}"
         [ -n "$idx" ] && printf ',"user_index":"%s"' "$idx"
         [ -n "$uptime" ] && printf ',"uptime":"%s"' "$uptime"
+        [ -n "$msg" ] && printf ',"state_msg":"%s"' "$(json_escape "$msg")"
         printf '}\n'
         ;;
     *)

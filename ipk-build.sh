@@ -63,6 +63,19 @@ exit 0
 POSTEOF
 chmod 755 "$CTRL_DIR/postinst"
 
+# Compile translations (.po is excluded from data above; runtime uses .lmo)
+PO="$ROOTFS/usr/lib/lua/luci/i18n/shucampus.zh-cn.po"
+if [ -s "$PO" ]; then
+    mkdir -p "$DATA_DIR/usr/lib/lua/luci/i18n"
+    if python3 "$PROJECT_DIR/tools/po2lmo.py" "$PO" \
+        "$DATA_DIR/usr/lib/lua/luci/i18n/shucampus.zh-cn.lmo" 2>/dev/null; then
+        chmod 644 "$DATA_DIR/usr/lib/lua/luci/i18n/shucampus.zh-cn.lmo"
+        echo "    zh-cn translation compiled"
+    else
+        echo "    WARNING: po2lmo failed, translation skipped"
+    fi
+fi
+
 # Step 3: Create data.tar.gz
 echo "[3/5] Creating data.tar.gz..."
 (cd "$DATA_DIR" && tar --owner=0 --group=0 -czf "$WORK_DIR/data.tar.gz" .)

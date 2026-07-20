@@ -1,0 +1,163 @@
+msgid ""
+msgstr "Project-Id-Version: luci-app-shucampus 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+# ---- Controller: menu entries ----
+msgid "Campus Network"
+msgstr "校园网"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Interface Info"
+msgstr "接口信息"
+
+msgid "Logs"
+msgstr "日志"
+
+# ---- Settings page ----
+msgid "Campus Network Authentication"
+msgstr "校园网认证"
+
+msgid "Manage Shanghai University Ruijie SAM+ portal login and keepalive. The daemon automatically authenticates and maintains the campus network session."
+msgstr "管理上海大学锐捷 SAM+ Portal 认证与保活。守护进程自动完成认证并维持校园网会话。"
+
+msgid "Account Settings"
+msgstr "账号设置"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Enable campus network auto-authentication at boot"
+msgstr "开机自动认证校园网"
+
+msgid "Username"
+msgstr "用户名"
+
+msgid "Campus network portal login username"
+msgstr "校园网 Portal 登录用户名"
+
+msgid "Password"
+msgstr "密码"
+
+msgid "Campus network portal login password"
+msgstr "校园网 Portal 登录密码"
+
+msgid "ISP"
+msgstr "运营商"
+
+msgid "Select the ISP/operator for this connection"
+msgstr "选择此连接使用的运营商"
+
+msgid "China Telecom"
+msgstr "中国电信"
+
+msgid "China Unicom"
+msgstr "中国联通"
+
+msgid "China Mobile"
+msgstr "中国移动"
+
+msgid "Network Settings"
+msgstr "网络设置"
+
+msgid "Portal URL"
+msgstr "Portal 地址"
+
+msgid "Base URL of the Ruijie portal server"
+msgstr "锐捷 Portal 服务器的基础 URL"
+
+msgid "Campus Gateway"
+msgstr "校园网网关"
+
+msgid "IP of the campus network gateway for routing"
+msgstr "校园网网关 IP（用于路由）"
+
+msgid "Interface Name"
+msgstr "接口名称"
+
+msgid "Network interface name created in /etc/config/network"
+msgstr "在 /etc/config/network 中创建的网络接口名"
+
+msgid "Campus CIDR"
+msgstr "校园网网段"
+
+msgid "Campus network route prefix (e.g. 10.0.0.0/8)"
+msgstr "校园网路由前缀（如 10.0.0.0/8）"
+
+msgid "Keepalive Interval"
+msgstr "保活间隔"
+
+msgid "Seconds between keepalive requests"
+msgstr "两次保活请求之间的间隔秒数"
+
+# ---- Interface status page ----
+msgid "Connection Status"
+msgstr "连接状态"
+
+msgid "Loading..."
+msgstr "加载中…"
+
+msgid "Daemon"
+msgstr "守护进程"
+
+msgid "Campus IP"
+msgstr "校园网 IP"
+
+msgid "Online Since"
+msgstr "上线时间"
+
+msgid "Session ID"
+msgstr "会话 ID"
+
+msgid "Login Now"
+msgstr "立即认证"
+
+msgid "Disconnect"
+msgstr "断开连接"
+
+msgid "Restart Daemon"
+msgstr "重启守护进程"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "Not Running"
+msgstr "未运行"
+
+msgid "Authenticating..."
+msgstr "认证中…"
+
+msgid "Waiting for NAS..."
+msgstr "等待接入设备响应…"
+
+msgid "Connected"
+msgstr "已认证"
+
+msgid "Auth Failed"
+msgstr "认证失败"
+
+msgid "Offline"
+msgstr "已离线"
+
+msgid "Unknown"
+msgstr "未知"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Stopped"
+msgstr "已停止"
+
+# ---- Log page ----
+msgid "Daemon Log"
+msgstr "守护进程日志"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Clear Log"
+msgstr "清空日志"
+
+msgid "Auto Refresh"
+msgstr "自动刷新"

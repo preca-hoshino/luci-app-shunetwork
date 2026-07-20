@@ -1,0 +1,66 @@
+<%#
+LuCI - Lua Configuration Interface
+Campus network log viewer
+-%>
+
+<div class="cbi-section" style="padding:12px;margin-bottom:16px">
+    <h3 style="margin-top:0"><%:Daemon Log%></h3>
+
+    <div style="margin-bottom:8px">
+        <button class="btn cbi-button cbi-button-apply" onclick="shuRefreshLog(true)"><%:Refresh%></button>
+        <button class="btn cbi-button cbi-button-reset" onclick="shuClearLog()"><%:Clear Log%></button>
+        <label style="margin-left:12px">
+            <input type="checkbox" id="shu_autorefresh" checked onclick="shuToggleAuto()"/>
+            <%:Auto Refresh%>
+        </label>
+    </div>
+
+    <pre id="shu_log" style="width:100%;height:420px;overflow:auto;background:#1e1e1e;color:#ddd;font-family:monospace;font-size:11px;padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all"><%:Loading...%></pre>
+</div>
+
+<script type="text/javascript">//<![CDATA[
+var LOG_URL   = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log")%>';
+var CLEAR_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log_clear")%>';
+var shuTimer = null;
+
+function shuEscape(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Colorize [INFO]/[WARN]/[ERROR] level tags
+function shuColorize(text) {
+    return shuEscape(text).split('\n').map(function(line) {
+        if (line.indexOf('[ERROR]') !== -1) return '<span style="color:#ff6b6b">' + line + '</span>';
+        if (line.indexOf('[WARN]')  !== -1) return '<span style="color:#ffd43b">' + line + '</span>';
+        return '<span style="color:#8ce99a">' + line + '</span>';
+    }).join('\n');
+}
+
+function shuRefreshLog(manual) {
+    XHR.get(LOG_URL, null, function(x, data) {
+        var el = document.getElementById('shu_log');
+        var text = (typeof data === 'string' && data.length) ? data : '(empty)';
+        el.innerHTML = shuColorize(text);
+        el.scrollTop = el.scrollHeight;
+    });
+}
+
+function shuClearLog() {
+    XHR.get(CLEAR_URL, null, function() {
+        shuRefreshLog(true);
+    });
+}
+
+function shuToggleAuto() {
+    var on = document.getElementById('shu_autorefresh').checked;
+    if (on && !shuTimer) {
+        shuTimer = setInterval(shuRefreshLog, 5000);
+    } else if (!on && shuTimer) {
+        clearInterval(shuTimer);
+        shuTimer = null;
+    }
+}
+
+setTimeout(shuRefreshLog, 300);
+shuTimer = setInterval(shuRefreshLog, 5000);
+//]]></script>

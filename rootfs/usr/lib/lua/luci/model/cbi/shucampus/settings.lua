@@ -3,10 +3,6 @@ local uci = require "luci.model.uci".cursor()
 m = Map("shucampus", translate("Campus Network Authentication"),
     translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive. The daemon automatically authenticates and maintains the campus network session."))
 
--- ========== Status section ==========
-s = m:section(SimpleSection)
-s.template = "shucampus/status"
-
 -- ========== Account settings ==========
 t = m:section(TypedSection, "campus", translate("Account Settings"))
 t.anonymous = true
@@ -26,10 +22,10 @@ password.rmempty = true
 
 service = t:option(ListValue, "service", translate("ISP"),
     translate("Select the ISP/operator for this connection"))
-service:value("shu", "Campus Network (校园网)")
-service:value("dx", "China Telecom (电信)")
-service:value("lt", "China Unicom (联通)")
-service:value("yd", "China Mobile (移动)")
+service:value("shu", translate("Campus Network"))
+service:value("dx", translate("China Telecom"))
+service:value("lt", translate("China Unicom"))
+service:value("yd", translate("China Mobile"))
 service.default = "shu"
 
 -- ========== Network settings ==========
