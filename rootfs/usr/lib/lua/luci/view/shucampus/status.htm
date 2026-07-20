@@ -1,0 +1,76 @@
+<%#
+LuCI - Lua Configuration Interface
+Copyright 2024
+-%>
+
+<div id="shucampus_status" style="margin-bottom:16px">
+    <div class="cbi-section" style="padding:12px">
+        <h3 style="margin-top:0"><%:Connection Status%></h3>
+        <table class="table" style="width:auto">
+            <tr>
+                <td style="width:160px;font-weight:bold"><%:Daemon%></td>
+                <td><span id="shu_daemon" class="label label-warning"><%:Checking...%></span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:bold"><%:Campus IP%></td>
+                <td><span id="shu_ip">-</span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:bold"><%:Uptime%></td>
+                <td><span id="shu_uptime">-</span></td>
+            </tr>
+        </table>
+
+        <div style="margin-top:12px">
+            <button class="btn cbi-button cbi-button-apply" onclick="shuAction('login')"><%:Login Now%></button>
+            <button class="btn cbi-button cbi-button-reset" onclick="shuAction('logout')"><%:Logout%></button>
+            <button class="btn cbi-button cbi-button-reload" onclick="shuAction('restart')"><%:Restart Daemon%></button>
+        </div>
+    </div>
+</div>
+
+<div id="shucampus_log" style="margin-bottom:16px">
+    <div class="cbi-section" style="padding:12px">
+        <h3 style="margin-top:0"><%:Log%></h3>
+        <button class="btn cbi-button cbi-button-apply" style="margin-bottom:8px" onclick="shuRefreshLog()"><%:Refresh Log%></button>
+        <textarea id="shu_log" class="cbi-input-textarea" style="width:100%;height:300px;font-family:monospace;font-size:11px" readonly></textarea>
+    </div>
+</div>
+
+<script type="text/javascript">//<![CDATA[
+var STATUS_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","status")%>';
+var LOG_URL    = '<%=luci.dispatcher.build_url("admin","services","shucampus","log")%>';
+var LOGIN_URL  = '<%=luci.dispatcher.build_url("admin","services","shucampus","login")%>';
+var LOGOUT_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","logout")%>';
+var RESTART_URL= '<%=luci.dispatcher.build_url("admin","services","shucampus","restart")%>';
+
+function shuUpdateStatus() {
+    XHR.get(STATUS_URL, null, function(x, data) {
+        try {
+            var s = JSON.parse(data);
+            var running = (s.daemon_running === true || s.daemon_running === 'true');
+            document.getElementById('shu_daemon').textContent = running ? 'Running' : 'Stopped';
+            document.getElementById('shu_daemon').className = running ? 'label label-success' : 'label label-danger';
+            document.getElementById('shu_ip').textContent = s.campus_ip || '-';
+            document.getElementById('shu_uptime').textContent = s.uptime || '-';
+        } catch(e) {}
+    });
+}
+
+function shuAction(action) {
+    var url = action === 'login' ? LOGIN_URL : action === 'logout' ? LOGOUT_URL : RESTART_URL;
+    XHR.get(url, null, function() {
+        setTimeout(shuUpdateStatus, 2000);
+    });
+}
+
+function shuRefreshLog() {
+    XHR.get(LOG_URL, null, function(x, data) {
+        document.getElementById('shu_log').value = data || '(empty)';
+    });
+}
+
+setTimeout(shuUpdateStatus, 500);
+setTimeout(shuRefreshLog, 800);
+setInterval(shuUpdateStatus, 5000);
+//]]></script>

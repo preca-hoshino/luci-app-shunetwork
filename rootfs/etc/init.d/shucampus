@@ -1,0 +1,132 @@
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=99
+STOP=10
+
+NAME=shucampus
+CORE=/usr/bin/shucampus_core.sh
+
+_start_service() {
+    local enabled
+    config_load shucampus
+    config_get enabled settings enabled
+    [ "${enabled:-0}" = "1" ] || return 1
+
+    procd_open_instance
+    procd_set_param command /bin/sh "$CORE" daemon
+    procd_set_param respawn 60 5 0
+    procd_set_param pidfile /var/run/shucampus.pid
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+
+start_service() {
+    _setup_interface
+    _start_service
+}
+
+stop_service() {
+    # Only stop the daemon. The portal session is left intact: the PIDFILE
+    # survives so the next start can resume/adopt it without a fresh login.
+    # Logging out here would turn every procd reload into a re-login storm.
+    :
+}
+
+service_triggers() {
+    procd_add_reload_trigger "shucampus"
+}
+
+reload_service() {
+    stop_service
+    sleep 1
+    start_service
+}
+
+login() {
+    _setup_interface
+    $CORE login
+}
+
+logout() {
+    $CORE logout
+}
+
+status() {
+    local enabled campus_ip daemon_running pid
+    config_load shucampus
+    config_get enabled settings enabled
+    campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
+    [ -s /var/run/shucampus.pid ] && pid=$(cat /var/run/shucampus.pid 2>/dev/null)
+    [ -n "$pid" ] && [ -d "/proc/$pid" ] && daemon_running="true" || daemon_running="false"
+
+    printf '{"enabled":"%s","campus_ip":"%s","daemon_running":%s' \
+        "${enabled:-0}" "${campus_ip:-}" "$daemon_running"
+    [ -n "$pid" ] && printf ',"pid":"%s"' "$pid"
+    printf ',"uptime":"%s"' "$(cat /var/run/shucampus_uptime 2>/dev/null)"
+    printf '}\n'
+}
+
+_setup_interface() {
+    local iface gw cidr target mask_hex
+    config_load shucampus
+    config_get iface settings interface
+    config_get gw settings gateway
+    config_get cidr settings cidr
+    [ -z "$iface" ] && iface=campus
+    [ -z "$gw" ] && return 1
+    [ -z "$cidr" ] && return 1
+
+    target="${cidr%/*}"
+    mask="${cidr#*/}"
+
+    if ! uci -q get network."$iface" >/dev/null 2>&1; then
+        uci -q batch <<-EOF
+			set network.$iface=interface
+			set network.$iface.device=wan
+			set network.$iface.proto=dhcp
+			set network.$iface.gateway=0.0.0.0
+		EOF
+        uci commit network
+    fi
+
+    local route_exists=0
+    _check_route() {
+        local t
+        config_get t "$1" target
+        [ "$t" = "$target" ] && route_exists=1
+    }
+    config_foreach _check_route route
+
+    if [ "$route_exists" != "1" ]; then
+        uci -q batch <<-EOF
+			add network route
+			set network.@route[-1].interface=$iface
+			set network.@route[-1].target=$target
+			set network.@route[-1].netmask=$(_cidr_to_netmask "$mask")
+			set network.@route[-1].gateway=$gw
+		EOF
+        uci commit network
+    fi
+
+    ifup "$iface" 2>/dev/null || true
+}
+
+_cidr_to_netmask() {
+    local mask=$1 i
+    local result=""
+    for i in 0 1 2 3; do
+        [ $i -gt 0 ] && result="${result}."
+        if [ "$mask" -ge 8 ]; then
+            result="${result}255"
+            mask=$((mask - 8))
+        elif [ "$mask" -gt 0 ]; then
+            result="${result}$((256 - 2^(8-mask)))"
+            mask=0
+        else
+            result="${result}0"
+        fi
+    done
+    echo "$result"
+}

@@ -1,0 +1,7 @@
+# Build artifacts
+*.ipk
+
+# OS / editor
+Thumbs.db
+*.swp
+*~
