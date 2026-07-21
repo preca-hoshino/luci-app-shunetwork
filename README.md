@@ -1,4 +1,4 @@
-# luci-app-shucampus
+# luci-app-shunetwork
 
 LuCI application for Shanghai University Ruijie SAM+ campus network authentication.
 
@@ -13,7 +13,7 @@ Automatically logs in to the campus network portal and sends keepalive heartbeat
 - **Manual disconnect**: Logout without auto-reconnect until explicitly re-enabled
 - **Route management**: Creates/manages the campus network route and DHCP interface
 - **Config validation**: Idles gracefully when credentials are missing
-- **Logging**: Persistent log at `/etc/shucampus.log` with syslog mirroring, 64KB rotation
+- **Logging**: Persistent log at `/etc/shunetwork.log` with syslog mirroring, 64KB rotation
 - **Full zh-cn translation**: Localized LuCI interface
 
 ### LuCI Pages
@@ -44,11 +44,11 @@ Automatically logs in to the campus network portal and sends keepalive heartbeat
 
 ## Installation
 
-Download the latest `.ipk` from [Releases](https://github.com/preca-hoshino/luci-app-shucampus/releases) and install:
+Download the latest `.ipk` from [Releases](https://github.com/preca-hoshino/luci-app-shunetwork/releases) and install:
 
 ```bash
 opkg update
-opkg install /tmp/luci-app-shucampus_*.ipk
+opkg install /tmp/luci-app-shunetwork_*.ipk
 ```
 
 Or build from source (see below).
@@ -62,7 +62,7 @@ sudo apt install python3
 # Build the .ipk
 ./tools/ipk-build.sh
 
-# Output: luci-app-shucampus_1.0-1_all.ipk
+# Output: luci-app-shunetwork_1.0-1_all.ipk
 ```
 
 ## Conventions
@@ -70,7 +70,7 @@ sudo apt install python3
 ### Directory Layout
 
 ```
-luci-app-shucampus/
+luci-app-shunetwork/
   luasrc/                   # LuCI Lua source → /usr/lib/lua/luci/
     controller/             #   Entry points (module("luci.controller.*"))
     model/cbi/              #   CBI form models
@@ -87,13 +87,13 @@ luci-app-shucampus/
 ### Git Commit Style
 
 ```
-luci-app-shucampus: short description in present tense
+luci-app-shunetwork: short description in present tense
 
 Optional body explaining what and why.
 ```
 
 Prefix scope for cross-cutting changes:
-- `core: ` → `shucampus_core.sh`
+- `core: ` → `shunetwork_core.sh`
 - `luci: ` → controller/CBI/views/i18n  
 - `build: ` → Makefile, ipk-build.sh, CI
 

@@ -1,20 +1,20 @@
 #!/bin/sh
 
-LOGFILE=/etc/shucampus.log
-PIDFILE=/var/run/shucampus_index
-UPTIME_FILE=/var/run/shucampus_uptime
-STATE_FILE=/var/run/shucampus_state
-MSG_FILE=/var/run/shucampus_msg
-FAIL_FILE=/var/run/shucampus_fails
-LOGIN_LOCK=/var/run/shucampus_login.lock
-DPIDFILE=/var/run/shucampus_daemon.pid
-ROUTE_LOCK=/var/run/shucampus_route.lock
+LOGFILE=/etc/shunetwork.log
+PIDFILE=/var/run/shunetwork_index
+UPTIME_FILE=/var/run/shunetwork_uptime
+STATE_FILE=/var/run/shunetwork_state
+MSG_FILE=/var/run/shunetwork_msg
+FAIL_FILE=/var/run/shunetwork_fails
+LOGIN_LOCK=/var/run/shunetwork_login.lock
+DPIDFILE=/var/run/shunetwork_daemon.pid
+ROUTE_LOCK=/var/run/shunetwork_route.lock
 # Written by the 'logout' command: while present the daemon stays offline
 # on purpose (manual disconnect). Cleared by login / service start / reboot.
-SUPPRESS_FILE=/var/run/shucampus_suppress
+SUPPRESS_FILE=/var/run/shunetwork_suppress
 
 _uci() {
-    uci -q get shucampus.@campus[0]."$1" 2>/dev/null || echo ""
+    uci -q get shunetwork.@campus[0]."$1" 2>/dev/null || echo ""
 }
 
 # Persist daemon state for the status API. $1=state, optional $2=portal
@@ -41,7 +41,7 @@ reload_config() {
     PORTAL=$(_uci portal)
     GATEWAY=$(_uci gateway)
     KEEPALIVE=$(_uci keepalive)
-    # Defaults for everything non-credential (mirror /etc/config/shucampus)
+    # Defaults for everything non-credential (mirror /etc/config/shunetwork)
     [ -z "$SERVICE" ]   && SERVICE=shu
     [ -z "$PORTAL" ]    && PORTAL=http://10.10.9.9/eportal
     [ -z "$GATEWAY" ]   && GATEWAY=10.85.16.200
@@ -103,12 +103,12 @@ log() {
     fi
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >> "$LOGFILE"
     case "$level" in
-        ERROR) logger -t shucampus -p daemon.err -- "$*" 2>/dev/null ;;
-        WARN)  logger -t shucampus -p daemon.warning -- "$*" 2>/dev/null ;;
+        ERROR) logger -t shunetwork -p daemon.err -- "$*" 2>/dev/null ;;
+        WARN)  logger -t shunetwork -p daemon.warning -- "$*" 2>/dev/null ;;
         INFO)
             case "$*" in
                 "Keepalive OK"*|"QS attempt"*|"retry login"*) : ;;
-                *) logger -t shucampus -p daemon.notice -- "$*" 2>/dev/null ;;
+                *) logger -t shunetwork -p daemon.notice -- "$*" 2>/dev/null ;;
             esac
             ;;
     esac
@@ -383,7 +383,7 @@ case "${1:-}" in
         if [ -f "$DPIDFILE" ]; then
             oldpid=$(cat "$DPIDFILE" 2>/dev/null)
             if [ -n "$oldpid" ] && [ -d "/proc/$oldpid" ] && \
-               tr '\0' ' ' < "/proc/$oldpid/cmdline" 2>/dev/null | grep -q "shucampus_core"; then
+               tr '\0' ' ' < "/proc/$oldpid/cmdline" 2>/dev/null | grep -q "shunetwork_core"; then
                 exit 0
             fi
         fi
@@ -448,7 +448,7 @@ case "${1:-}" in
         if [ -s "$DPIDFILE" ]; then
             read -r dpid < "$DPIDFILE"
             if [ -n "$dpid" ] && [ -d "/proc/$dpid" ] && \
-               tr '\0' ' ' < "/proc/$dpid/cmdline" 2>/dev/null | grep -q "shucampus_core"; then
+               tr '\0' ' ' < "/proc/$dpid/cmdline" 2>/dev/null | grep -q "shunetwork_core"; then
                 daemon_running=true
             fi
         fi

@@ -1,13 +1,13 @@
 # Commit message conventions:
-#   luci-app-shucampus: <subject>
+#   luci-app-shunetwork: <subject>
 #
 # Examples:
-#   luci-app-shucampus: add login retry backoff
-#   luci-app-shucampus: fix reload loop on config commit
-#   luci-app-shucampus: restructure to luasrc/ + root/ layout
+#   luci-app-shunetwork: add login retry backoff
+#   luci-app-shunetwork: fix reload loop on config commit
+#   luci-app-shunetwork: restructure to luasrc/ + root/ layout
 #
 # Scope (optional, for cross-cutting changes):
-#   core:    shucampus_core.sh
+#   core:    shunetwork_core.sh
 #   luci:    LuCI controller/CBI/views/i18n
 #   build:   Makefile, ipk-build.sh, CI
 #

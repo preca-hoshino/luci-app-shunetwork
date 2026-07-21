@@ -4,19 +4,19 @@ USE_PROCD=1
 START=99
 STOP=10
 
-NAME=shucampus
-CORE=/usr/bin/shucampus_core.sh
+NAME=shunetwork
+CORE=/usr/bin/shunetwork_core.sh
 
 _start_service() {
     local enabled
-    config_load shucampus
+    config_load shunetwork
     config_get enabled settings enabled
     [ "${enabled:-0}" = "1" ] || return 1
 
     procd_open_instance
     procd_set_param command /bin/sh "$CORE" daemon
     procd_set_param respawn 60 5 0
-    procd_set_param pidfile /var/run/shucampus.pid
+    procd_set_param pidfile /var/run/shunetwork.pid
     procd_set_param stdout 1
     procd_set_param stderr 1
     procd_close_instance
@@ -25,7 +25,7 @@ _start_service() {
 start_service() {
     # Explicit service start/restart = admin intent: clear any manual
     # disconnect suppression (procd respawn does not pass through here).
-    rm -f /var/run/shucampus_suppress
+    rm -f /var/run/shunetwork_suppress
     _setup_interface
     _start_service
 }
@@ -38,7 +38,7 @@ stop_service() {
 }
 
 service_triggers() {
-    procd_add_reload_trigger "shucampus"
+    procd_add_reload_trigger "shunetwork"
 }
 
 reload_service() {
@@ -60,22 +60,22 @@ logout() {
 
 status() {
     local enabled campus_ip daemon_running pid
-    config_load shucampus
+    config_load shunetwork
     config_get enabled settings enabled
     campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
-    [ -s /var/run/shucampus.pid ] && pid=$(cat /var/run/shucampus.pid 2>/dev/null)
+    [ -s /var/run/shunetwork.pid ] && pid=$(cat /var/run/shunetwork.pid 2>/dev/null)
     [ -n "$pid" ] && [ -d "/proc/$pid" ] && daemon_running="true" || daemon_running="false"
 
     printf '{"enabled":"%s","campus_ip":"%s","daemon_running":%s' \
         "${enabled:-0}" "${campus_ip:-}" "$daemon_running"
     [ -n "$pid" ] && printf ',"pid":"%s"' "$pid"
-    printf ',"uptime":"%s"' "$(cat /var/run/shucampus_uptime 2>/dev/null)"
+    printf ',"uptime":"%s"' "$(cat /var/run/shunetwork_uptime 2>/dev/null)"
     printf '}\n'
 }
 
 _setup_interface() {
     local iface gw cidr target mask_hex
-    config_load shucampus
+    config_load shunetwork
     config_get iface settings interface
     config_get gw settings gateway
     config_get cidr settings cidr

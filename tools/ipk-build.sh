@@ -1,13 +1,13 @@
 #!/bin/bash
-# Build luci-app-shucampus .ipk
+# Build luci-app-shunetwork .ipk
 # Source layout: luasrc/ (LuCI Lua), root/ (filesystem), po/ (translations)
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null || pwd)"
 LUASRC="$PROJECT_DIR/luasrc"
 ROOT="$PROJECT_DIR/root"
-PO_SRC="$PROJECT_DIR/po/zh-cn/shucampus.zh-cn.po"
-PKG_NAME="luci-app-shucampus"
+PO_SRC="$PROJECT_DIR/po/zh-cn/shunetwork.zh-cn.po"
+PKG_NAME="luci-app-shunetwork"
 VERSION="1.0"
 RELEASE="1"
 
@@ -50,10 +50,10 @@ SIZE_KB=$(du -sk "$DATA_DIR" | cut -f1)
 # Step 3: Create control files
 echo "[2/5] Writing control files..."
 cat > "$CTRL_DIR/control" << 'CTRLEOF'
-Package: luci-app-shucampus
+Package: luci-app-shunetwork
 Version: 1.0-1
 Depends: luci-base, curl
-Source: package/luci-app-shucampus
+Source: package/luci-app-shunetwork
 Section: luci
 Priority: optional
 Maintainer: Preca
@@ -67,9 +67,9 @@ sed -i "s/CTRL_PLACEHOLDER/$SIZE_KB/" "$CTRL_DIR/control"
 cat > "$CTRL_DIR/postinst" << 'POSTEOF'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT}" ] || {
-    chmod 755 /etc/init.d/shucampus 2>/dev/null
-    chmod 755 /usr/bin/shucampus_core.sh 2>/dev/null
-    /etc/init.d/shucampus enable 2>/dev/null || true
+    chmod 755 /etc/init.d/shunetwork 2>/dev/null
+    chmod 755 /usr/bin/shunetwork_core.sh 2>/dev/null
+    /etc/init.d/shunetwork enable 2>/dev/null || true
 }
 exit 0
 POSTEOF
@@ -80,8 +80,8 @@ echo "[3/5] Compiling translations..."
 mkdir -p "$DATA_DIR/usr/lib/lua/luci/i18n"
 if [ -s "$PO_SRC" ]; then
     if python3 "$PROJECT_DIR/tools/po2lmo.py" "$PO_SRC" \
-        "$DATA_DIR/usr/lib/lua/luci/i18n/shucampus.zh-cn.lmo" 2>/dev/null; then
-        chmod 644 "$DATA_DIR/usr/lib/lua/luci/i18n/shucampus.zh-cn.lmo"
+        "$DATA_DIR/usr/lib/lua/luci/i18n/shunetwork.zh-cn.lmo" 2>/dev/null; then
+        chmod 644 "$DATA_DIR/usr/lib/lua/luci/i18n/shunetwork.zh-cn.lmo"
         echo "    zh-cn translation compiled"
     else
         echo "    WARNING: po2lmo failed, translation skipped"

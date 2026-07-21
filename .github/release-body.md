@@ -1,4 +1,4 @@
-## luci-app-shucampus
+## luci-app-shunetwork
 
 LuCI application for Shanghai University Ruijie SAM+ campus network authentication.
 
@@ -6,9 +6,9 @@ LuCI application for Shanghai University Ruijie SAM+ campus network authenticati
 
 ```bash
 opkg update
-opkg install /tmp/luci-app-shucampus_*.ipk
+opkg install /tmp/luci-app-shunetwork_*.ipk
 ```
 
 ### Changelog
 
-See [commits](https://github.com/preca-hoshino/luci-app-shucampus/commits/main) for full history.
+See [commits](https://github.com/preca-hoshino/luci-app-shunetwork/commits/main) for full history.

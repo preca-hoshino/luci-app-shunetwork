@@ -15,8 +15,8 @@ Log viewer page: textarea with scroll-to-tail/head buttons (tailscale-style).
 </div>
 
 <script type="text/javascript">//<![CDATA[
-var SHU_LOG_URL   = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log")%>';
-var SHU_CLEAR_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","log_clear")%>';
+var SHU_LOG_URL   = '<%=luci.dispatcher.build_url("admin","services","shunetwork","api","log")%>';
+var SHU_CLEAR_URL = '<%=luci.dispatcher.build_url("admin","services","shunetwork","api","log_clear")%>';
 
 // tailscale-style: the two buttons jump the page between each other
 document.getElementById('shu_btn_tail').addEventListener('click', function() {

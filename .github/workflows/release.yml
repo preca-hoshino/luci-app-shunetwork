@@ -22,14 +22,14 @@ jobs:
 
       - name: Rename ipk with tag version
         run: |
-          mv luci-app-shucampus_*.ipk "luci-app-shucampus_${{ steps.version.outputs.tag }}_all.ipk"
+          mv luci-app-shunetwork_*.ipk "luci-app-shunetwork_${{ steps.version.outputs.tag }}_all.ipk"
 
       - name: Create Release
         id: release
         uses: softprops/action-gh-release@v2
         with:
-          name: "luci-app-shucampus v${{ steps.version.outputs.tag }}"
+          name: "luci-app-shunetwork v${{ steps.version.outputs.tag }}"
           body_path: .github/release-body.md
           fail_on_unmatched_files: true
           files: |
-            luci-app-shucampus_*.ipk
+            luci-app-shunetwork_*.ipk

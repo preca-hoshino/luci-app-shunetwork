@@ -1,5 +1,5 @@
 msgid ""
-msgstr "Project-Id-Version: luci-app-shucampus 1.0\n"
+msgstr "Project-Id-Version: luci-app-shunetwork 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
 # ---- Controller: menu entries ----

@@ -1,11 +1,11 @@
 local uci = require "luci.model.uci".cursor()
 local sys = require "luci.sys"
 
-m = Map("shucampus", translate("SHU Network"),
+m = Map("shunetwork", translate("SHU Network"),
     translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive."))
 
 sb = m:section(SimpleSection)
-sb.template = "shucampus/status-bar"
+sb.template = "shunetwork/status-bar"
 
 t = m:section(TypedSection, "campus")
 t.anonymous = true
@@ -73,11 +73,11 @@ keepalive.default = "120"
 --              so "disabled" really means offline, not just unmanaged.
 -- Read via @campus[0] to stay correct even if the section is unnamed.
 function m.on_after_commit(self)
-    local enabled = uci:get("shucampus", "@campus[0]", "enabled")
+    local enabled = uci:get("shunetwork", "@campus[0]", "enabled")
     if enabled == "1" then
-        sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
+        sys.call("/etc/init.d/shunetwork restart >/dev/null 2>&1 &")
     else
-        sys.call("/usr/bin/shucampus_core.sh logout >/dev/null 2>&1; /etc/init.d/shucampus stop >/dev/null 2>&1 &")
+        sys.call("/usr/bin/shunetwork_core.sh logout >/dev/null 2>&1; /etc/init.d/shunetwork stop >/dev/null 2>&1 &")
     end
 end
 

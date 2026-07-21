@@ -1,6 +1,6 @@
 include $(TOPDIR)/rules.mk
 
-PKG_NAME:=luci-app-shucampus
+PKG_NAME:=luci-app-shunetwork
 PKG_VERSION:=1.0
 PKG_RELEASE:=1
 
@@ -19,10 +19,10 @@ include $(TOPDIR)/feeds/luci/luci.mk
 #   root/   -> /
 #   po/     -> .lmo -> /usr/lib/lua/luci/i18n/
 
-define Package/luci-app-shucampus/postinst
+define Package/luci-app-shunetwork/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] || {
-    /etc/init.d/shucampus enable 2>/dev/null || true
+    /etc/init.d/shunetwork enable 2>/dev/null || true
 }
 exit 0
 endef
