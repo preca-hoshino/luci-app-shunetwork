@@ -1,5 +1,11 @@
 # Build artifacts
 *.ipk
+*.lmo
+
+# Deploy scripts (contains credentials)
+deploy.ps1
+deploy.sh
+ipk-build.ps1
 
 # OS / editor
 Thumbs.db

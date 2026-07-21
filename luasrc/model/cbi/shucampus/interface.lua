@@ -3,6 +3,6 @@ m = Map("shucampus", translate("SHU Network"),
 m.pageaction = false
 
 s = m:section(SimpleSection)
-s.template = "shucampus/interface_status"
+s.template = "shucampus/interface-status"
 
 return m

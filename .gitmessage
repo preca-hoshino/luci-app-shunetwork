@@ -1,0 +1,14 @@
+# Commit message conventions:
+#   luci-app-shucampus: <subject>
+#
+# Examples:
+#   luci-app-shucampus: add login retry backoff
+#   luci-app-shucampus: fix reload loop on config commit
+#   luci-app-shucampus: restructure to luasrc/ + root/ layout
+#
+# Scope (optional, for cross-cutting changes):
+#   core:    shucampus_core.sh
+#   luci:    LuCI controller/CBI/views/i18n
+#   build:   Makefile, ipk-build.sh, CI
+#
+# Keep first line under 72 chars. Use present tense.

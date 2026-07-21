@@ -74,21 +74,45 @@ Deploy to a running OpenWrt router via SSH:
 .\deploy.ps1
 ```
 
-## Development
+## Conventions
 
-```bash
-# Directories
-rootfs/                    # IPK root filesystem
-  etc/init.d/shucampus     # procd init script
-  usr/bin/shucampus_core.sh # Core daemon and CLI
-  usr/lib/lua/luci/        # LuCI controller + CBI models + views + i18n
-  lib/upgrade/keep.d/      # sysupgrade persistence
+### Directory Layout
 
-tools/po2lmo.py            # .po → .lmo compiler
-
-ipk-build.sh               # IPK packager
-deploy.ps1                 # Build → SCP → install → configure → start
 ```
+luci-app-shucampus/
+  luasrc/                   # LuCI Lua source → /usr/lib/lua/luci/
+    controller/             #   Entry points (module("luci.controller.*"))
+    model/cbi/              #   CBI form models
+    view/                   #   .htm templates
+  root/                     # Filesystem overlay → /
+    etc/config/             #   UCI config defaults
+    etc/init.d/             #   procd init script
+    usr/bin/                #   Core daemon/CLI
+    lib/upgrade/keep.d/     #   sysupgrade persistence
+  po/{lang}/                # Translation .po files
+  tools/                    # Build-time helpers (po2lmo.py)
+```
+
+### Git Commit Style
+
+```
+luci-app-shucampus: short description in present tense
+
+Optional body explaining what and why.
+```
+
+Prefix scope for cross-cutting changes:
+- `core: ` → `shucampus_core.sh`
+- `luci: ` → controller/CBI/views/i18n  
+- `build: ` → Makefile, ipk-build.sh, CI
+
+### File Naming
+
+- All lowercase
+- Hyphen-separated for multi-word names (e.g., `status-bar.htm`, not `status_bar.htm`)
+- Controller: `{appname}.lua`
+- CBI model: `{appname}/{section}.lua`
+- View: `{appname}/{section}.htm`
 
 ## License
 

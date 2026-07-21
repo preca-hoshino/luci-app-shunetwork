@@ -1,9 +1,11 @@
 # Shell scripts and router-side files MUST stay LF (ash breaks on CRLF)
 *.sh            text eol=lf
 Makefile        text eol=lf
-rootfs/**       text eol=lf
+root/**         text eol=lf
+luasrc/**       text eol=lf
+po/**           text eol=lf
 
-# PowerShell deploy scripts
+# PowerShell scripts (deploy/build, not on router)
 *.ps1           text eol=crlf
 
 # Binary artifacts

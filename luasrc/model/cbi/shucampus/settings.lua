@@ -5,7 +5,7 @@ m = Map("shucampus", translate("SHU Network"),
     translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive."))
 
 sb = m:section(SimpleSection)
-sb.template = "shucampus/status_bar"
+sb.template = "shucampus/status-bar"
 
 t = m:section(TypedSection, "campus")
 t.anonymous = true
