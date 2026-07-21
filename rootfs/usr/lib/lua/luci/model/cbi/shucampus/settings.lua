@@ -1,7 +1,7 @@
 local uci = require "luci.model.uci".cursor()
 local sys = require "luci.sys"
 
-m = Map("shucampus", translate("Campus Network Authentication"),
+m = Map("shucampus", translate("SHUCampus"),
     translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive."))
 
 sb = m:section(SimpleSection)

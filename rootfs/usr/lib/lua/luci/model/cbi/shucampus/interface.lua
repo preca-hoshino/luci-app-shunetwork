@@ -1,4 +1,4 @@
-m = Map("shucampus", translate("Campus Network"),
+m = Map("shucampus", translate("SHUCampus"),
     translate("Ruijie SAM+ portal authentication client."))
 m.pageaction = false
 

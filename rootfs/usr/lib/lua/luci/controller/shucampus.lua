@@ -6,7 +6,7 @@ module("luci.controller.shucampus", package.seeall)
 function index()
     entry({"admin", "services", "shucampus"},
         firstchild(),
-        _("Campus Network"), 80
+        _("SHUCampus"), 80
     )
 
     entry({"admin", "services", "shucampus", "settings"},
