@@ -91,12 +91,6 @@ msgstr "保活间隔"
 msgid "Seconds between keepalive requests (60-600). Setting it too low may trigger server-side rate limiting."
 msgstr "两次保活请求之间的间隔秒数（60-600）。设置过小可能触发服务器限流。"
 
-msgid "Log File"
-msgstr "日志文件"
-
-msgid "Path of the daemon log file. A path under /etc/ persists across reboots; /var/log/ is lost on reboot."
-msgstr "守护进程日志文件路径。/etc/ 下的路径重启后保留；/var/log/ 重启后丢失。"
-
 # ---- Interface status page ----
 msgid "Connection Status"
 msgstr "连接状态"
@@ -170,6 +164,9 @@ msgstr "认证状态"
 
 msgid "Manually Disconnected"
 msgstr "已手动断开"
+
+msgid "Config Incomplete"
+msgstr "配置不完整"
 
 msgid "Basic Settings"
 msgstr "基本设置"

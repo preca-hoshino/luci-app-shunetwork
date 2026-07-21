@@ -22,9 +22,15 @@ function shuFmtBytes(b) {
     return b + ' B';
 }
 
+function shuEsc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function shuRow(label, value) {
     return '<tr class="tr"><td class="td left" width="25%">' + label + '</td>' +
-           '<td class="td left" width="25%">' + (value || '-') + '</td></tr>';
+           '<td class="td left" width="25%">' + shuEsc(value || '-') + '</td></tr>';
 }
 
 function shuRenderIfinfo(s) {

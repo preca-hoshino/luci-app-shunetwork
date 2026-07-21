@@ -21,6 +21,14 @@ function shuParse(x) {
     try { return JSON.parse(text); } catch (e) { return null; }
 }
 
+// Portal messages are rendered into innerHTML - escape them or a
+// hostile/MITM'd portal could inject markup into the (root) LuCI page.
+function shuEsc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function shuCall(action, done) {
     XHR.get(SHU_API + '/' + action, null, function() {
         if (done) done();
@@ -51,10 +59,11 @@ function shuRenderLogin(s) {
         return '<span style="color:orange"><%:Waiting for NAS...%></span>';
     case 'auth_failed':
         return '<span style="color:red"><strong><%:Auth Failed%></strong>' +
-               (s.state_msg ? ': ' + s.state_msg : '') + '</span>' +
+               (s.state_msg ? ': ' + shuEsc(s.state_msg) : '') + '</span>' +
                '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
     case 'offline':
         return '<span style="color:red"><%:Offline%></span>' +
+               (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '') +
                '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
     case 'disabled':
         return '<span style="color:#888"><%:Disabled%></span>';
@@ -63,6 +72,9 @@ function shuRenderLogin(s) {
     case 'suppressed':
         return '<span style="color:#888"><%:Manually Disconnected%></span>' +
                '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+    case 'config_error':
+        return '<span style="color:red"><strong><%:Config Incomplete%></strong></span>' +
+               (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '');
     default:
         return '<span style="color:orange"><%:Unknown%></span>' +
                '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';

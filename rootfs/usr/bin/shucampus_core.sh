@@ -1,5 +1,6 @@
 #!/bin/sh
 
+LOGFILE=/etc/shucampus.log
 PIDFILE=/var/run/shucampus_index
 UPTIME_FILE=/var/run/shucampus_uptime
 STATE_FILE=/var/run/shucampus_state
@@ -7,6 +8,7 @@ MSG_FILE=/var/run/shucampus_msg
 FAIL_FILE=/var/run/shucampus_fails
 LOGIN_LOCK=/var/run/shucampus_login.lock
 DPIDFILE=/var/run/shucampus_daemon.pid
+ROUTE_LOCK=/var/run/shucampus_route.lock
 # Written by the 'logout' command: while present the daemon stays offline
 # on purpose (manual disconnect). Cleared by login / service start / reboot.
 SUPPRESS_FILE=/var/run/shucampus_suppress
@@ -32,19 +34,38 @@ json_escape() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-USERNAME=$(_uci username)
-PASSWORD=$(_uci password)
-SERVICE=$(_uci service)
-PORTAL=$(_uci portal)
-GATEWAY=$(_uci gateway)
-KEEPALIVE=$(_uci keepalive)
-LOGFILE=$(_uci logfile)
-[ -z "$LOGFILE" ] && LOGFILE=/etc/shucampus.log
-# Sanitize: non-numeric -> default; floor 60s so we never hammer the portal
-case "$KEEPALIVE" in
-    ''|*[!0-9]*) KEEPALIVE=120 ;;
-esac
-[ "$KEEPALIVE" -lt 60 ] && KEEPALIVE=60
+reload_config() {
+    USERNAME=$(_uci username)
+    PASSWORD=$(_uci password)
+    SERVICE=$(_uci service)
+    PORTAL=$(_uci portal)
+    GATEWAY=$(_uci gateway)
+    KEEPALIVE=$(_uci keepalive)
+    # Defaults for everything non-credential (mirror /etc/config/shucampus)
+    [ -z "$SERVICE" ]   && SERVICE=shu
+    [ -z "$PORTAL" ]    && PORTAL=http://10.10.9.9/eportal
+    [ -z "$GATEWAY" ]   && GATEWAY=10.85.16.200
+    # Sanitize keepalive: non-numeric -> default; floor 60s (anti-hammer)
+    case "$KEEPALIVE" in
+        ''|*[!0-9]*) KEEPALIVE=120 ;;
+    esac
+    [ "$KEEPALIVE" -lt 60 ] && KEEPALIVE=60
+}
+
+# Missing credentials make every login attempt pointless - report once
+# and let the daemon idle in config_error until the config appears.
+config_check() {
+    local missing=""
+    [ -z "$USERNAME" ] && missing="$missing username"
+    [ -z "$PASSWORD" ] && missing="$missing password"
+    if [ -n "$missing" ]; then
+        set_state "config_error" "missing:$missing"
+        return 1
+    fi
+    return 0
+}
+
+reload_config
 
 # ---- Login failure backoff: 30s,60s,120s,300s then cap at 600s ----
 # Protects the account from being rate-limited/banned by the portal when
@@ -102,10 +123,16 @@ short() {
 get_query_string() {
     local resp qs i rc
     for i in 1 2 3; do
+        if ! route_lock; then
+            log WARN "QS attempt $i: route lock busy, skipped"
+            [ "$i" -lt 3 ] && sleep 5 && continue
+            return 1
+        fi
         ip route replace default via "$GATEWAY" dev wan metric 5 2>/dev/null
         resp=$(curl -sS --connect-timeout 5 "http://1.1.1.1/" 2>&1)
         rc=$?
         ip route del default via "$GATEWAY" dev wan metric 5 2>/dev/null
+        route_unlock
         if [ $rc -ne 0 ]; then
             log WARN "QS attempt $i: curl failed (rc=$rc): $(short "$resp")"
         else
@@ -155,15 +182,39 @@ do_logout() {
         --data-urlencode "userIndex=$idx" 2>&1
 }
 
+# Serialize the temporary default-route window between the daemon and
+# manual invocations (online/login commands). Concurrent add/del of the
+# same route would race. mkdir is atomic; 60s stale recovery included.
+route_lock() {
+    local n=0 age
+    while ! mkdir "$ROUTE_LOCK" 2>/dev/null; do
+        age=$(( $(date +%s) - $(stat -c%Y "$ROUTE_LOCK" 2>/dev/null || echo 0) ))
+        if [ "$age" -gt 60 ]; then
+            rm -rf "$ROUTE_LOCK"
+            continue
+        fi
+        n=$((n+1))
+        [ $n -gt 100 ] && return 1
+        sleep 1
+    done
+    return 0
+}
+
+route_unlock() {
+    rm -rf "$ROUTE_LOCK"
+}
+
 # Query portal for the session bound to our current WAN IP.
 # Prints userIndex and returns 0 when an active session for USERNAME exists.
 recover_online_session() {
     local resp uid uidx rc
+    route_lock || { log WARN "adopt check: route lock busy"; return 1; }
     ip route replace default via "$GATEWAY" dev wan metric 5 2>/dev/null
     resp=$(curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=getOnlineUserInfo" \
         --data-urlencode "userIndex=" 2>&1)
     rc=$?
     ip route del default via "$GATEWAY" dev wan metric 5 2>/dev/null
+    route_unlock
     if [ $rc -ne 0 ]; then
         log WARN "adopt check: getOnlineUserInfo curl failed (rc=$rc): $(short "$resp")"
         return 1
@@ -201,10 +252,12 @@ login_once() {
         return 2
     fi
     resp=$(do_login "$qs")
-    if [ -z "$resp" ]; then
-        set_state "auth_failed" "empty response from portal"
-        log ERROR "Login FAIL: portal returned empty response"
-        return 3
+    rc=$?
+    if [ $rc -ne 0 ] || [ -z "$resp" ]; then
+        # Transport problem, not a credential rejection - treat as waiting
+        set_state "waiting" "portal unreachable"
+        log ERROR "portal unreachable (curl rc=$rc)"
+        return 2
     fi
     user_index=$(echo "$resp" | grep -o '"userIndex":"[^"]*"' | cut -d'"' -f4)
     if [ -n "$user_index" ]; then
@@ -225,6 +278,14 @@ login_once() {
 daemon_loop() {
     local idx ka msg rc backoff
     idx=""
+
+    # Idle until credentials exist; the user may fix the config at any
+    # time and the daemon picks it up without needing a restart.
+    while ! config_check; do
+        log ERROR "missing config, idling (fix in LuCI -> Settings)"
+        sleep 60
+        reload_config
+    done
 
     # Manual disconnect has priority over any resumable session
     if [ ! -f "$SUPPRESS_FILE" ]; then
