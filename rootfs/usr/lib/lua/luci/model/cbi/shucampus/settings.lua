@@ -1,4 +1,5 @@
 local uci = require "luci.model.uci".cursor()
+local sys = require "luci.sys"
 
 m = Map("shucampus", translate("Campus Network Authentication"),
     translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive. The daemon automatically authenticates and maintains the campus network session."))
@@ -82,9 +83,9 @@ logfile.default = "/etc/shucampus.log"
 function m.on_after_commit(self)
     local enabled = uci:get("shucampus", "@campus[0]", "enabled")
     if enabled == "1" then
-        luci.sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
+        sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
     else
-        luci.sys.call("/usr/bin/shucampus_core.sh logout >/dev/null 2>&1; /etc/init.d/shucampus stop >/dev/null 2>&1 &")
+        sys.call("/usr/bin/shucampus_core.sh logout >/dev/null 2>&1; /etc/init.d/shucampus stop >/dev/null 2>&1 &")
     end
 end
 

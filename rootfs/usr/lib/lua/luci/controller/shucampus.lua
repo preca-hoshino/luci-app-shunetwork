@@ -1,4 +1,5 @@
 local http = require "luci.http"
+local sys = require "luci.sys"
 
 module("luci.controller.shucampus", package.seeall)
 
@@ -55,12 +56,12 @@ end
 
 function action_status()
     http.prepare_content("application/json")
-    http.write(luci.sys.exec(CORE .. " status 2>/dev/null"))
+    http.write(sys.exec(CORE .. " status 2>/dev/null"))
 end
 
 function action_log()
     http.prepare_content("text/plain; charset=utf-8")
-    http.write(luci.sys.exec("tail -n 300 " .. logfile() .. " 2>/dev/null"))
+    http.write(sys.exec("tail -n 300 " .. logfile() .. " 2>/dev/null"))
 end
 
 -- Network interface data for the info page.
@@ -83,7 +84,7 @@ function action_ifstatus()
 
         local dev = st.l3_device or st.device
         if type(dev) == "string" and #dev > 0 then
-            local raw = luci.sys.exec("ip -s -j link show dev " .. dev .. " 2>/dev/null")
+            local raw = sys.exec("ip -s -j link show dev " .. dev .. " 2>/dev/null")
             local data = json.parse(raw)
             if type(data) == "table" and type(data[1]) == "table" then
                 result.mtu = data[1].mtu
@@ -101,25 +102,25 @@ function action_ifstatus()
 end
 
 function action_log_clear()
-    luci.sys.call(": > " .. logfile() .. " 2>/dev/null")
+    sys.call(": > " .. logfile() .. " 2>/dev/null")
     http.prepare_content("application/json")
     http.write('{"result":"ok"}')
 end
 
 function action_login()
-    luci.sys.call(CORE .. " login >/dev/null 2>&1 &")
+    sys.call(CORE .. " login >/dev/null 2>&1 &")
     http.prepare_content("application/json")
     http.write('{"result":"ok"}')
 end
 
 function action_logout()
-    luci.sys.call(CORE .. " logout >/dev/null 2>&1 &")
+    sys.call(CORE .. " logout >/dev/null 2>&1 &")
     http.prepare_content("application/json")
     http.write('{"result":"ok"}')
 end
 
 function action_restart()
-    luci.sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
+    sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
     http.prepare_content("application/json")
     http.write('{"result":"ok"}')
 end
