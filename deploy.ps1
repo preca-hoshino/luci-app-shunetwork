@@ -34,7 +34,7 @@ uci -q get shucampus.settings >/dev/null 2>&1 || uci set shucampus.settings=camp
 uci set shucampus.settings.enabled=1
 uci set shucampus.settings.username=25123368
 uci set shucampus.settings.password=MurphyNeveu#34494=
-uci set shucampus.settings.logfile=/etc/shucampus.log
+uci -q delete shucampus.settings.logfile
 uci commit shucampus
 
 echo "=== Step 4: Clear LuCI cache ==="

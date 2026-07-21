@@ -2,30 +2,15 @@ local uci = require "luci.model.uci".cursor()
 local sys = require "luci.sys"
 
 m = Map("shucampus", translate("Campus Network Authentication"),
-    translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive. The daemon automatically authenticates and maintains the campus network session."))
+    translate("Manage Shanghai University Ruijie SAM+ portal login and keepalive."))
 
--- ========== Status bar (top of page, like luci-app-tailscale) ==========
 sb = m:section(SimpleSection)
 sb.template = "shucampus/status_bar"
 
--- ========== Settings with tabs ==========
 t = m:section(TypedSection, "campus")
 t.anonymous = true
 
--- ---- Tab: basic ----
 t:tab("basic", translate("Basic Settings"))
-
-enable = t:taboption("basic", Flag, "enabled", translate("Enable"),
-    translate("Enable campus network auto-authentication at boot"))
-enable.rmempty = false
-
--- Dynamic login status line (filled by status_bar.htm JS), tailscale-style
-login_status = t:taboption("basic", DummyValue, "_login_status", translate("Login Status"))
-login_status:depends("enabled", "1")
-login_status.rawhtml = true
-function login_status.cfgvalue(self, section)
-    return "<div id=\"shu_login_status\"><em>" .. translate("Collecting data ...") .. "</em></div>"
-end
 
 username = t:taboption("basic", Value, "username", translate("Username"),
     translate("Campus network portal login username"))

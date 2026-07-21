@@ -45,6 +45,9 @@ function index()
 
     entry({"admin", "services", "shucampus", "api", "restart"},
         call("action_restart"))
+
+    entry({"admin", "services", "shucampus", "api", "toggle"},
+        call("action_toggle"))
 end
 
 local CORE = "/usr/bin/shucampus_core.sh"
@@ -117,6 +120,17 @@ end
 
 function action_restart()
     sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
+    http.prepare_content("application/json")
+    http.write('{"result":"ok"}')
+end
+
+function action_toggle()
+    local state = http.formvalue("enabled")
+    if state == "1" then
+        sys.call("uci set shucampus.@campus[0].enabled=1; uci commit shucampus; /etc/init.d/shucampus restart >/dev/null 2>&1")
+    else
+        sys.call("uci set shucampus.@campus[0].enabled=0; uci commit shucampus; /usr/bin/shucampus_core.sh logout >/dev/null 2>&1; /etc/init.d/shucampus stop >/dev/null 2>&1")
+    end
     http.prepare_content("application/json")
     http.write('{"result":"ok"}')
 end

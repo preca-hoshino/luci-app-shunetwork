@@ -1,28 +1,31 @@
 <%#
-Status bar on top of the settings page (tailscale-style).
-Also drives the "Login Status" DummyValue inside the form.
+Integrated status card: service toggle, connection state, action buttons.
+Replaces the old enable Flag + login_status DummyValue in the CBI form.
 -%>
 
-<div class="cbi-section" id="status_bar">
-    <p id="shu_service_status"><em><%:Collecting data ...%></em></p>
-    <p style="margin:0">
-        <a href="javascript:shuRestart()"><%:Restart Daemon%></a>
-    </p>
+<div class="cbi-section" id="status_card">
+    <div class="cbi-section-node">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px">
+            <strong style="font-size:1.1em"><%:Campus Network%></strong>
+            <span id="shu_toggle_btn"></span>
+        </div>
+        <hr style="margin:0;opacity:0.3">
+        <div style="padding:8px 12px 12px">
+            <p id="shu_login_status" style="margin:4px 0;min-height:1.4em"></p>
+            <p id="shu_action_buttons" style="margin:4px 0 0"></p>
+        </div>
+    </div>
 </div>
 
 <script type="text/javascript">//<![CDATA[
 var SHU_API = '<%=luci.dispatcher.build_url("admin","services","shucampus","api")%>';
 
 function shuParse(x) {
-    // XHR callback gives (xhr, json, duration); responseText works
-    // regardless of the response Content-Type.
     var text = x && x.responseText;
     if (!text) return null;
     try { return JSON.parse(text); } catch (e) { return null; }
 }
 
-// Portal messages are rendered into innerHTML - escape them or a
-// hostile/MITM'd portal could inject markup into the (root) LuCI page.
 function shuEsc(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -36,49 +39,82 @@ function shuCall(action, done) {
     });
 }
 
-function shuRestart() { shuCall('restart'); }
-function shuLogin()   { shuCall('login'); }
-function shuLogout()  { shuCall('logout'); }
+function shuToggle() {
+    var state = window._shuEnabled ? '0' : '1';
+    XHR.get(SHU_API + '/toggle?enabled=' + state, null, function() {
+        window._shuEnabled = !window._shuEnabled;
+        setTimeout(shuPollStatus, 1500);
+    });
+}
 
-function shuRenderService(running) {
-    var color = running ? 'green' : 'red';
-    var text  = running ? '<%:RUNNING%>' : '<%:NOT RUNNING%>';
-    return '<em><span style="color:' + color + '"><strong>' +
-           '<%:Campus Network%>' + ' ' + text + '</strong></span></em>';
+function shuLogin()  { shuCall('login'); }
+function shuLogout() { shuCall('logout'); }
+function shuRestart() { shuCall('restart'); }
+
+function shuRenderToggle(enabled, daemonRunning) {
+    if (enabled === '1') {
+        return '<button class="cbi-button cbi-button-reset" style="min-width:60px" onclick="shuToggle()">' +
+               '<%:Disable%>' + '</button>';
+    } else {
+        return '<button class="cbi-button cbi-button-apply" style="min-width:60px" onclick="shuToggle()">' +
+               '<%:Enable%>' + '</button>';
+    }
 }
 
 function shuRenderLogin(s) {
     switch (s.state) {
     case 'online':
         return '<span style="color:green"><strong><%:Connected%></strong></span>' +
-               (s.uptime ? ' <span style="color:#666">(' + s.uptime + ')</span>' : '') +
-               '<br><a style="color:green" href="javascript:shuLogout()"><%:Disconnect%></a>';
+               (s.uptime ? ' <span style="color:#666">(' + s.uptime + ')</span>' : '');
     case 'authenticating':
-        return '<span style="color:orange"><%:Authenticating...%></span>';
+        return '<span style="color:orange"><strong><%:Authenticating...%></strong></span>';
     case 'waiting':
-        return '<span style="color:orange"><%:Waiting for NAS...%></span>';
+        return '<span style="color:orange"><strong><%:Waiting for NAS...%></strong></span>';
     case 'auth_failed':
         return '<span style="color:red"><strong><%:Auth Failed%></strong>' +
-               (s.state_msg ? ': ' + shuEsc(s.state_msg) : '') + '</span>' +
-               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+               (s.state_msg ? ': ' + shuEsc(s.state_msg) : '') + '</span>';
     case 'offline':
-        return '<span style="color:red"><%:Offline%></span>' +
-               (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '') +
-               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+        return '<span style="color:red"><strong><%:Offline%></strong></span>' +
+               (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '');
     case 'disabled':
-        return '<span style="color:#888"><%:Disabled%></span>';
+        return '<span style="color:#888"><strong><%:Disabled%></strong></span>';
     case 'stopped':
-        return '<span style="color:#888"><%:Not Running%></span>';
+        return '<span style="color:#888"><strong><%:Not Running%></strong></span>';
     case 'suppressed':
-        return '<span style="color:#888"><%:Manually Disconnected%></span>' +
-               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+        return '<span style="color:#888"><strong><%:Manually Disconnected%></strong></span>';
     case 'config_error':
         return '<span style="color:red"><strong><%:Config Incomplete%></strong></span>' +
                (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '');
     default:
-        return '<span style="color:orange"><%:Unknown%></span>' +
-               '<br><a href="javascript:shuLogin()"><%:Login Now%></a>';
+        return '<span style="color:orange"><strong><%:Unknown%></strong></span>';
     }
+}
+
+function shuRenderActions(s) {
+    var enabled = s.enabled === '1';
+    var state = s.state;
+    var html = '';
+
+    if (!enabled || state === 'disabled' || state === 'stopped') {
+        return '';
+    }
+
+    if (state === 'online') {
+        html += '<button class="cbi-button cbi-button-apply" onclick="shuLogout()"><%:Disconnect%></button> ';
+        html += '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
+    } else if (state === 'suppressed') {
+        html += '<button class="cbi-button cbi-button-apply" onclick="shuLogin()"><%:Login Now%></button> ';
+        html += '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
+    } else if (state === 'auth_failed') {
+        html += '<button class="cbi-button cbi-button-apply" onclick="shuLogin()"><%:Retry%></button> ';
+        html += '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
+    } else if (state === 'config_error') {
+        html += '';
+    } else {
+        // offline, waiting, authenticating
+        html += '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
+    }
+    return html;
 }
 
 function shuPollStatus() {
@@ -86,12 +122,16 @@ function shuPollStatus() {
         var s = shuParse(x);
         if (!s) return;
 
-        var running = (s.daemon_running === true || s.daemon_running === 'true');
-        var svcEl = document.getElementById('shu_service_status');
-        if (svcEl) svcEl.innerHTML = shuRenderService(running && s.enabled === '1');
+        window._shuEnabled = s.enabled === '1';
+
+        var toggleEl = document.getElementById('shu_toggle_btn');
+        if (toggleEl) toggleEl.innerHTML = shuRenderToggle(s.enabled, s.daemon_running);
 
         var loginEl = document.getElementById('shu_login_status');
         if (loginEl) loginEl.innerHTML = shuRenderLogin(s);
+
+        var actionsEl = document.getElementById('shu_action_buttons');
+        if (actionsEl) actionsEl.innerHTML = shuRenderActions(s);
     });
 }
 
