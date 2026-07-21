@@ -13,8 +13,8 @@ jobs:
 
       - name: Build .ipk
         run: |
-          chmod +x ipk-build.sh
-          ./ipk-build.sh
+          chmod +x tools/ipk-build.sh
+          ./tools/ipk-build.sh
 
       - name: Get version from tag
         id: version
