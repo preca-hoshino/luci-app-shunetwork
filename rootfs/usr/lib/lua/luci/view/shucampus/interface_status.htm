@@ -8,9 +8,10 @@ No action buttons here.
 <script type="text/javascript">//<![CDATA[
 var SHU_IF_URL = '<%=luci.dispatcher.build_url("admin","services","shucampus","api","ifstatus")%>';
 
-function shuParse(data) {
-    if (typeof data === 'object' && data !== null) return data;
-    try { return JSON.parse(data); } catch (e) { return null; }
+function shuParse(x) {
+    var text = x && x.responseText;
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (e) { return null; }
 }
 
 function shuFmtBytes(b) {
@@ -44,8 +45,8 @@ function shuRenderIfinfo(s) {
 }
 
 function shuPollIfinfo() {
-    XHR.get(SHU_IF_URL, null, function(x, data) {
-        shuRenderIfinfo(shuParse(data));
+    XHR.get(SHU_IF_URL, null, function(x) {
+        shuRenderIfinfo(shuParse(x));
     });
 }
 

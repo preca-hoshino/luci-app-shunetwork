@@ -27,10 +27,12 @@ document.getElementById('shu_btn_head').addEventListener('click', function() {
 });
 
 function shuPollLog() {
-    XHR.get(SHU_LOG_URL, null, function(x, data) {
+    // LuCI XHR callback is cb(xhr, json, duration); json is only parsed
+    // for application/json. For our text/plain endpoint read responseText.
+    XHR.get(SHU_LOG_URL, null, function(x) {
+        var text = (x && typeof x.responseText === 'string') ? x.responseText : '';
         var el = document.getElementById('shu_log');
-        var text = (typeof data === 'string' && data.length) ? data : '(empty)';
-        el.value = text;
+        el.value = text.length ? text : '(empty)';
         var lines = text.trim().split(/\n/).length;
         el.rows = Math.min(lines + 1, 100);
     });

@@ -13,9 +13,12 @@ Also drives the "Login Status" DummyValue inside the form.
 <script type="text/javascript">//<![CDATA[
 var SHU_API = '<%=luci.dispatcher.build_url("admin","services","shucampus","api")%>';
 
-function shuParse(data) {
-    if (typeof data === 'object' && data !== null) return data;
-    try { return JSON.parse(data); } catch (e) { return null; }
+function shuParse(x) {
+    // XHR callback gives (xhr, json, duration); responseText works
+    // regardless of the response Content-Type.
+    var text = x && x.responseText;
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (e) { return null; }
 }
 
 function shuCall(action, done) {
@@ -67,8 +70,8 @@ function shuRenderLogin(s) {
 }
 
 function shuPollStatus() {
-    XHR.get(SHU_API + '/status', null, function(x, data) {
-        var s = shuParse(data);
+    XHR.get(SHU_API + '/status', null, function(x) {
+        var s = shuParse(x);
         if (!s) return;
 
         var running = (s.daemon_running === true || s.daemon_running === 'true');
