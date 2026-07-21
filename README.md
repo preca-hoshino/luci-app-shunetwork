@@ -60,18 +60,9 @@ Or build from source (see below).
 sudo apt install python3
 
 # Build the .ipk
-./ipk-build.sh
+./tools/ipk-build.sh
 
 # Output: luci-app-shucampus_1.0-1_all.ipk
-```
-
-## Manual Deploy
-
-Deploy to a running OpenWrt router via SSH:
-
-```powershell
-# Edit deploy.ps1, set the SSH host alias, then:
-.\deploy.ps1
 ```
 
 ## Conventions
