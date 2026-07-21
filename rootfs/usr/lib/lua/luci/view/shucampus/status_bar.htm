@@ -15,11 +15,20 @@ Auth state is rendered into a DummyValue inside the CBI form.
 
 <script type="text/javascript">//<![CDATA[
 var SHU_API = '<%=luci.dispatcher.build_url("admin","services","shucampus","api")%>';
+var SHU_RETRY = 0;
+var SHU_LAST_STATUS = null;
+var SHU_LAST_IFACE = null;
 
 function shuParse(x) {
     var text = x && x.responseText;
-    if (!text) return null;
-    try { return JSON.parse(text); } catch (e) { return null; }
+    if (!text || text.indexOf('<!') === 0) {
+        console.warn('shuParse: empty or HTML response');
+        return null;
+    }
+    try { return JSON.parse(text); } catch (e) {
+        console.warn('shuParse: JSON parse error', e);
+        return null;
+    }
 }
 
 function shuEsc(s) {
@@ -37,10 +46,20 @@ function shuFormatBytes(b) {
     return (i === 0 ? bytes : bytes.toFixed(1)) + ' ' + units[i];
 }
 
+// Progressive poll after an action: 1s, 2s, 4s, then back to normal 5s
+function shuPollAfterAction(tryCount) {
+    if (tryCount == null) tryCount = 0;
+    shuPollStatus();
+    if (tryCount < 3) {
+        setTimeout(function() { shuPollAfterAction(tryCount + 1); },
+                   1000 * Math.pow(2, tryCount));
+    }
+}
+
 function shuCall(action, done) {
     XHR.get(SHU_API + '/' + action, null, function() {
         if (done) done();
-        setTimeout(shuPollStatus, 1500);
+        shuPollAfterAction(0);
     });
 }
 
@@ -48,7 +67,7 @@ function shuToggle() {
     var state = window._shuEnabled ? '0' : '1';
     XHR.get(SHU_API + '/toggle?enabled=' + state, null, function() {
         window._shuEnabled = !window._shuEnabled;
-        setTimeout(shuPollStatus, 1500);
+        shuPollAfterAction(0);
     });
 }
 
@@ -138,30 +157,50 @@ function shuRenderIface(iface) {
 function shuPollStatus() {
     XHR.get(SHU_API + '/status', null, function(x) {
         var s = shuParse(x);
-        if (!s) return;
+        if (!s) {
+            SHU_RETRY++;
+            if (SHU_RETRY > 2 && SHU_LAST_STATUS) {
+                s = SHU_LAST_STATUS;
+            }
+            return;
+        }
+        SHU_RETRY = 0;
+        SHU_LAST_STATUS = s;
 
         window._shuEnabled = s.enabled === '1';
 
-        // Status bar
         var statusEl = document.getElementById('shu_service_status');
         if (statusEl) statusEl.innerHTML = shuRenderStatus(s.enabled, s.daemon_running);
 
         var btnEl = document.getElementById('shu_status_buttons');
         if (btnEl) btnEl.innerHTML = shuRenderButtons(s.enabled);
 
-        // Login status inside CBI form
         var loginEl = document.getElementById('shu_login_status');
         if (loginEl) loginEl.innerHTML = shuRenderLogin(s);
     });
 
-    // Interface info inside CBI form
     XHR.get(SHU_API + '/ifstatus', null, function(x) {
         var iface = shuParse(x);
+        if (!iface) {
+            if (SHU_LAST_IFACE) iface = SHU_LAST_IFACE;
+            return;
+        }
+        SHU_LAST_IFACE = iface;
         var ifaceEl = document.getElementById('shu_iface_value');
         if (ifaceEl) ifaceEl.innerHTML = shuRenderIface(iface);
     });
 }
 
-setTimeout(shuPollStatus, 300);
-setInterval(shuPollStatus, 5000);
+function shuStartPolling() {
+    shuPollStatus();
+    setTimeout(function() {
+        if (!SHU_LAST_STATUS) shuPollStatus();
+    }, 1000);
+    setTimeout(function() {
+        if (!SHU_LAST_STATUS) shuPollStatus();
+    }, 3000);
+    setInterval(shuPollStatus, 5000);
+}
+
+shuStartPolling();
 //]]></script>
