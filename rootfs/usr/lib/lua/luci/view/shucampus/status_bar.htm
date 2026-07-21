@@ -126,11 +126,12 @@ function shuRenderLogin(s) {
 
 function shuRenderIface(iface) {
     if (!iface || !iface.ipv4) {
-        return '<span style="color:#888"><%:Interface%> \u00b7 <%:Offline%></span>';
+        return shuDot('red') + ' <span style="color:red"><%:Disabled%></span>';
     }
     var rx = shuFormatBytes(iface.rx_bytes);
     var tx = shuFormatBytes(iface.tx_bytes);
-    return '<span>' + shuEsc(iface.ipv4) +
+    return shuDot('green') + ' <span style="color:green"><%:Enabled%></span>' +
+           ' \u00b7 ' + shuEsc(iface.ipv4) +
            '  \u2b07 ' + rx + '  \u2b06 ' + tx + '</span>';
 }
 
