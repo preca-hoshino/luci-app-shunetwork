@@ -12,6 +12,18 @@ t.anonymous = true
 
 t:tab("basic", translate("Basic Settings"))
 
+login_status = t:taboption("basic", DummyValue, "_login_status", translate("Login Status"))
+login_status.rawhtml = true
+function login_status.cfgvalue(self, section)
+    return "<span id=\"shu_login_status\"><em>" .. translate("Collecting data ...") .. "</em></span>"
+end
+
+iface_status = t:taboption("basic", DummyValue, "_iface_status", translate("Interface Info"))
+iface_status.rawhtml = true
+function iface_status.cfgvalue(self, section)
+    return "<span id=\"shu_iface_value\"><em>" .. translate("Collecting data ...") .. "</em></span>"
+end
+
 username = t:taboption("basic", Value, "username", translate("Username"),
     translate("Campus network portal login username"))
 username.rmempty = true

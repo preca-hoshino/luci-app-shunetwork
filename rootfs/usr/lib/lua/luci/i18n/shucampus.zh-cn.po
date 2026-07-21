@@ -177,6 +177,15 @@ msgstr "接口"
 msgid "Auth"
 msgstr "认证"
 
+msgid "SHUCampus"
+msgstr "校园网"
+
+msgid "RUNNING"
+msgstr "运行中"
+
+msgid "NOT RUNNING"
+msgstr "未运行"
+
 # ---- Interface info page ----
 msgid "Ruijie SAM+ portal authentication client."
 msgstr "锐捷 SAM+ Portal 认证客户端"
