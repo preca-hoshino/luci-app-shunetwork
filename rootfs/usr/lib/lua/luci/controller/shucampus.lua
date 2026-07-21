@@ -59,34 +59,40 @@ function action_log()
     http.write(luci.sys.exec("tail -n 300 " .. LOGFILE .. " 2>/dev/null"))
 end
 
--- Network interface data for the info page (from `ip -s -j addr`).
--- Prefers the campus (10.x) IPv4 address, falls back to the first inet one.
+-- Network interface data for the info page.
+-- Shows the *logical* campus interface (as named in settings): its own
+-- IPv4 from ubus, plus MTU/traffic counters of the underlying device.
 function action_ifstatus()
     http.prepare_content("application/json")
     local json = require "luci.jsonc"
-    local raw = luci.sys.exec("ip -s -j addr show dev wan 2>/dev/null")
-    local data = json.parse(raw)
-    local result = {}
-    if type(data) == "table" and type(data[1]) == "table" then
-        local dev = data[1]
-        result.name = dev.ifname
-        result.mtu = dev.mtu
-        local first4, campus4
-        for _, a in ipairs(dev.addr_info or {}) do
-            local addr = a["local"]   -- "local" is a reserved word in Lua
-            if a.family == "inet" then
-                first4 = first4 or addr
-                if type(addr) == "string" and addr:match("^10%.") then
-                    campus4 = addr
+    local util = require "luci.util"
+    local uci = require "luci.model.uci".cursor()
+    local ifname = uci:get("shucampus", "@campus[0]", "interface") or "campus"
+    local result = { name = ifname }
+
+    local st = util.ubus("network.interface." .. ifname, "status", {})
+    if type(st) == "table" and st.up then
+        local addrs = st["ipv4-address"]
+        if type(addrs) == "table" and type(addrs[1]) == "table" then
+            result.ipv4 = addrs[1].address
+        end
+
+        local dev = st.l3_device or st.device
+        if type(dev) == "string" and #dev > 0 then
+            local raw = luci.sys.exec("ip -s -j link show dev " .. dev .. " 2>/dev/null")
+            local data = json.parse(raw)
+            if type(data) == "table" and type(data[1]) == "table" then
+                result.mtu = data[1].mtu
+                if type(data[1].stats64) == "table" then
+                    result.rx_bytes = data[1].stats64.rx and data[1].stats64.rx.bytes
+                    result.tx_bytes = data[1].stats64.tx and data[1].stats64.tx.bytes
                 end
             end
         end
-        result.ipv4 = campus4 or first4
-        if type(dev.stats64) == "table" then
-            result.rx_bytes = dev.stats64.rx and dev.stats64.rx.bytes
-            result.tx_bytes = dev.stats64.tx and dev.stats64.tx.bytes
-        end
+    else
+        result.name = nil   -- interface down: page shows "No interface online."
     end
+
     http.write(json.stringify(result))
 end
 
