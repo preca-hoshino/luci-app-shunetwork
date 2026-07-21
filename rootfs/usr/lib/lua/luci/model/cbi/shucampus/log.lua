@@ -1,4 +1,4 @@
-m = Map("shucampus", translate("SHUCampus"))
+m = Map("shucampus", translate("SHU Network"))
 m.pageaction = false
 
 s = m:section(SimpleSection)

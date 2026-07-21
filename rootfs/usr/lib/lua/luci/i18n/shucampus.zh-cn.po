@@ -171,8 +171,8 @@ msgstr "接口"
 msgid "Auth"
 msgstr "认证"
 
-msgid "SHUCampus"
-msgstr "校园网"
+msgid "SHU Network"
+msgstr "SHU Network"
 
 msgid "RUNNING"
 msgstr "运行中"
