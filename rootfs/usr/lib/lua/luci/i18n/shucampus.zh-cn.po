@@ -171,6 +171,12 @@ msgstr "接口状态"
 msgid "Auth Status"
 msgstr "认证状态"
 
+msgid "Interface"
+msgstr "接口"
+
+msgid "Auth"
+msgstr "认证"
+
 # ---- Interface info page ----
 msgid "Ruijie SAM+ portal authentication client."
 msgstr "锐捷 SAM+ Portal 认证客户端"

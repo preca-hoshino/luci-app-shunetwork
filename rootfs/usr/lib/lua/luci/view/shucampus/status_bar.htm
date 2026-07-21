@@ -1,24 +1,27 @@
 <%#
-Integrated status card: toggle, interface info, auth state, action buttons.
+Integrated status card: toggle, daemon state, interface info, auth state.
+Each layer has its own status indicator and action buttons.
 -%>
 
 <div class="cbi-section" id="status_card">
     <div class="cbi-section-node">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px">
             <strong style="font-size:1.1em"><%:Campus Network%></strong>
             <span id="shu_toggle_btn"></span>
         </div>
-        <hr style="margin:0;opacity:0.3">
-        <div style="padding:8px 12px 12px">
-            <p style="margin:4px 0;min-height:1.4em">
-                <strong><%:Interface Status%>:</strong>
-                <span id="shu_interface_value"></span>
+        <div id="shu_card_body" style="padding:0 12px 10px">
+            <p id="shu_daemon_row" style="margin:4px 0;display:flex;align-items:center;min-height:1.6em">
+                <span id="shu_daemon_value"></span>
+                <span id="shu_restart_btn" style="margin-left:auto"></span>
             </p>
-            <p style="margin:4px 0;min-height:1.4em">
-                <strong><%:Auth Status%>:</strong>
+            <p id="shu_iface_row" style="margin:4px 0;min-height:1.6em"></p>
+            <p id="shu_auth_row" style="margin:4px 0;display:flex;align-items:center;min-height:1.6em">
                 <span id="shu_auth_value"></span>
+                <span id="shu_auth_btn" style="margin-left:auto"></span>
             </p>
-            <p id="shu_action_buttons" style="margin:4px 0 0;display:flex;gap:6px;flex-wrap:wrap"></p>
+        </div>
+        <div id="shu_disabled_body" style="padding:0 12px 10px;display:none">
+            <p style="margin:4px 0;color:#888"><%:Disabled%></p>
         </div>
     </div>
 </div>
@@ -66,6 +69,16 @@ function shuLogin()   { shuCall('login'); }
 function shuLogout()  { shuCall('logout'); }
 function shuRestart() { shuCall('restart'); }
 
+function shuDot(color) {
+    return '<span style="color:' + color + '">\u25cf</span>';
+}
+
+function shuTime(s) {
+    if (!s || !s.uptime) return '';
+    var parts = s.uptime.split(' ');
+    return parts.length > 1 ? parts[1] : s.uptime;
+}
+
 function shuRenderToggle(enabled) {
     if (enabled === '1') {
         return '<button class="cbi-button cbi-button-reset" style="min-width:60px" onclick="shuToggle()">' +
@@ -75,63 +88,68 @@ function shuRenderToggle(enabled) {
            '<%:Enable%>' + '</button>';
 }
 
-function shuRenderInterface(iface) {
+function shuRenderDaemon(enabled, running) {
+    if (enabled !== '1') {
+        return shuDot('#888') + ' <span style="color:#888"><%:Daemon%> \u00b7 <%:Stopped%></span>';
+    }
+    if (running) {
+        return shuDot('green') + ' <span style="color:green"><%:Daemon%> \u00b7 <%:Running%></span>';
+    }
+    return shuDot('red') + ' <span style="color:red"><%:Daemon%> \u00b7 <%:Stopped%></span>';
+}
+
+function shuRenderIface(iface) {
     if (!iface || !iface.ipv4) {
-        return '<span style="color:#888"><%:Interface Offline%></span>';
+        return shuDot('#888') + ' <span style="color:#888"><%:Interface%> \u00b7 <%:Offline%></span>';
     }
     var rx = shuFormatBytes(iface.rx_bytes);
     var tx = shuFormatBytes(iface.tx_bytes);
-    return '<span style="color:green">' + shuEsc(iface.ipv4) + '</span>' +
-           '  <span style="color:#666">\u2b07 ' + rx + '  \u2b06 ' + tx + '</span>';
+    return shuDot('green') + ' <span style="color:green"><%:Interface%> \u00b7 ' + shuEsc(iface.ipv4) +
+           '  \u2b07 ' + rx + '  \u2b06 ' + tx + '</span>';
 }
 
 function shuRenderAuth(s) {
-    switch (s.state) {
+    var state = s.state;
+    switch (state) {
     case 'online':
-        return '<span style="color:green"><strong><%:Connected%></strong></span>' +
-               (s.uptime ? ' <span style="color:#666">(' + s.uptime + ')</span>' : '');
+        return shuDot('green') + ' <span style="color:green"><%:Auth%> \u00b7 <strong><%:Connected%></strong>' +
+               ' (' + shuTime(s) + ')</span>';
     case 'authenticating':
-        return '<span style="color:orange"><strong><%:Authenticating...%></strong></span>';
+        return shuDot('orange') + ' <span style="color:orange"><%:Auth%> \u00b7 <strong><%:Authenticating...%></strong></span>';
     case 'waiting':
-        return '<span style="color:orange"><strong><%:Waiting for NAS...%></strong></span>';
+        return shuDot('orange') + ' <span style="color:orange"><%:Auth%> \u00b7 <strong><%:Waiting for NAS...%></strong></span>';
     case 'auth_failed':
-        return '<span style="color:red"><strong><%:Auth Failed%></strong>' +
+        return shuDot('red') + ' <span style="color:red"><%:Auth%> \u00b7 <strong><%:Auth Failed%></strong>' +
                (s.state_msg ? ': ' + shuEsc(s.state_msg) : '') + '</span>';
     case 'offline':
-        return '<span style="color:red"><strong><%:Offline%></strong></span>' +
-               (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '');
-    case 'disabled':
-        return '<span style="color:#888"><strong><%:Disabled%></strong></span>';
-    case 'stopped':
-        return '<span style="color:#888"><strong><%:Not Running%></strong></span>';
+        return shuDot('red') + ' <span style="color:red"><%:Auth%> \u00b7 <strong><%:Offline%></strong></span>' +
+               (s.state_msg ? ' (' + shuEsc(s.state_msg) + ')' : '');
     case 'suppressed':
-        return '<span style="color:#888"><strong><%:Manually Disconnected%></strong></span>';
+        return shuDot('#888') + ' <span style="color:#888"><%:Auth%> \u00b7 <strong><%:Manually Disconnected%></strong></span>';
     case 'config_error':
-        return '<span style="color:red"><strong><%:Config Incomplete%></strong></span>' +
-               (s.state_msg ? ' <span style="color:#888">(' + shuEsc(s.state_msg) + ')</span>' : '');
+        return shuDot('red') + ' <span style="color:red"><%:Auth%> \u00b7 <strong><%:Config Incomplete%></strong></span>' +
+               (s.state_msg ? ' (' + shuEsc(s.state_msg) + ')' : '');
     default:
-        return '<span style="color:orange"><strong><%:Unknown%></strong></span>';
+        return shuDot('#888') + ' <span style="color:#888"><%:Auth%> \u00b7 <strong><%:Unknown%></strong></span>';
     }
 }
 
-function shuRenderActions(s) {
-    var enabled = s.enabled === '1';
+function shuRenderAuthBtn(s) {
     var state = s.state;
-
-    if (!enabled || state === 'disabled' || state === 'stopped') return '';
-
+    if (s.enabled !== '1') return '';
     switch (state) {
     case 'online':
-        return '<button class="cbi-button cbi-button-apply" onclick="shuLogout()"><%:Disconnect%></button> ' +
-               '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
+        return '<button class="cbi-button cbi-button-apply" onclick="shuLogout()"><%:Disconnect%></button>';
     case 'suppressed':
+        return '<button class="cbi-button cbi-button-apply" onclick="shuLogin()"><%:Login Now%></button>';
     case 'auth_failed':
-        return '<button class="cbi-button cbi-button-apply" onclick="shuLogin()"><%:Login Now%></button> ' +
-               '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
-    case 'config_error':
-        return '';
-    default:
+        return '<button class="cbi-button cbi-button-apply" onclick="shuLogin()"><%:Retry%></button>';
+    case 'authenticating':
+    case 'waiting':
+    case 'offline':
         return '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>';
+    default:
+        return '';
     }
 }
 
@@ -141,21 +159,41 @@ function shuPollStatus() {
         if (!s) return;
 
         window._shuEnabled = s.enabled === '1';
+        var enabled = s.enabled === '1';
 
+        // Toggle button
         var toggleEl = document.getElementById('shu_toggle_btn');
         if (toggleEl) toggleEl.innerHTML = shuRenderToggle(s.enabled);
 
-        var authEl = document.getElementById('shu_auth_value');
-        if (authEl) authEl.innerHTML = shuRenderAuth(s);
+        // Show/hide body sections
+        var bodyEl = document.getElementById('shu_card_body');
+        var disabledEl = document.getElementById('shu_disabled_body');
+        if (bodyEl) bodyEl.style.display = enabled ? '' : 'none';
+        if (disabledEl) disabledEl.style.display = enabled ? 'none' : '';
 
-        var actionsEl = document.getElementById('shu_action_buttons');
-        if (actionsEl) actionsEl.innerHTML = shuRenderActions(s);
+        // Daemon row
+        var daemonEl = document.getElementById('shu_daemon_value');
+        if (daemonEl) daemonEl.innerHTML = shuRenderDaemon(s.enabled, s.daemon_running);
+
+        var restartEl = document.getElementById('shu_restart_btn');
+        if (restartEl) {
+            restartEl.innerHTML = enabled
+                ? '<button class="cbi-button cbi-button-neutral" onclick="shuRestart()"><%:Restart%></button>'
+                : '';
+        }
+
+        // Auth row
+        var authValEl = document.getElementById('shu_auth_value');
+        if (authValEl) authValEl.innerHTML = shuRenderAuth(s);
+
+        var authBtnEl = document.getElementById('shu_auth_btn');
+        if (authBtnEl) authBtnEl.innerHTML = shuRenderAuthBtn(s);
     });
 
     XHR.get(SHU_API + '/ifstatus', null, function(x) {
         var iface = shuParse(x);
-        var ifaceEl = document.getElementById('shu_interface_value');
-        if (ifaceEl) ifaceEl.innerHTML = shuRenderInterface(iface);
+        var ifaceEl = document.getElementById('shu_iface_row');
+        if (ifaceEl) ifaceEl.innerHTML = shuRenderIface(iface);
     });
 }
 
