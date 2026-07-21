@@ -3,7 +3,7 @@
 # Source layout: luasrc/ (LuCI Lua), root/ (filesystem), po/ (translations)
 set -e
 
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null || pwd)"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd -W 2>/dev/null || pwd)"
 LUASRC="$PROJECT_DIR/luasrc"
 ROOT="$PROJECT_DIR/root"
 PO_SRC="$PROJECT_DIR/po/zh-cn/shunetwork.zh-cn.po"
