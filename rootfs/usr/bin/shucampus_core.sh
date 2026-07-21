@@ -7,6 +7,7 @@ STATE_FILE=/var/run/shucampus_state
 MSG_FILE=/var/run/shucampus_msg
 FAIL_FILE=/var/run/shucampus_fails
 LOGIN_LOCK=/var/run/shucampus_login.lock
+DPIDFILE=/var/run/shucampus_daemon.pid
 # Written by the 'logout' command: while present the daemon stays offline
 # on purpose (manual disconnect). Cleared by login / service start / reboot.
 SUPPRESS_FILE=/var/run/shucampus_suppress
@@ -267,7 +268,6 @@ case "${1:-}" in
         # Single-instance guard: a stale/extra procd spawn or manual run
         # must not start a second keepalive loop. flock(1) from BusyBox is
         # unreliable on this platform, so use a plain pid file instead.
-        DPIDFILE=/var/run/shucampus_daemon.pid
         if [ -f "$DPIDFILE" ]; then
             oldpid=$(cat "$DPIDFILE" 2>/dev/null)
             if [ -n "$oldpid" ] && [ -d "/proc/$oldpid" ] && \
@@ -331,7 +331,15 @@ case "${1:-}" in
         state=""
         daemon_running=false
         campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
-        pgrep -f "shucampus_core.sh daemon" >/dev/null 2>&1 && daemon_running=true
+        # Check via the daemon's own pid file: pgrep -f would match the
+        # caller's own shell (its command line contains the pattern too).
+        if [ -s "$DPIDFILE" ]; then
+            read -r dpid < "$DPIDFILE"
+            if [ -n "$dpid" ] && [ -d "/proc/$dpid" ] && \
+               tr '\0' ' ' < "/proc/$dpid/cmdline" 2>/dev/null | grep -q "shucampus_core"; then
+                daemon_running=true
+            fi
+        fi
         [ -s "$PIDFILE" ] && read -r idx < "$PIDFILE"
 
         # State machine: disabled > stopped > persisted state > inferred

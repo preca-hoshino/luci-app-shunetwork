@@ -69,13 +69,17 @@ keepalive.rmempty = false
 keepalive.datatype = "and(uinteger,min(60),max(600))"
 keepalive.default = "120"
 
--- Apply immediately on save: enable -> (re)start daemon, disable -> stop it.
+-- Apply immediately on save:
+--   enable  -> (re)start the daemon (it resumes/adopts/logs in)
+--   disable -> log the portal session out, then stop the daemon,
+--              so "disabled" really means offline, not just unmanaged.
+-- Read via @campus[0] to stay correct even if the section is unnamed.
 function m.on_after_commit(self)
-    local enabled = uci:get("shucampus", "settings", "enabled")
+    local enabled = uci:get("shucampus", "@campus[0]", "enabled")
     if enabled == "1" then
         luci.sys.call("/etc/init.d/shucampus restart >/dev/null 2>&1 &")
     else
-        luci.sys.call("/etc/init.d/shucampus stop >/dev/null 2>&1 &")
+        luci.sys.call("/usr/bin/shucampus_core.sh logout >/dev/null 2>&1; /etc/init.d/shucampus stop >/dev/null 2>&1 &")
     end
 end
 
