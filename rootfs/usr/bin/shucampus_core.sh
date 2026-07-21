@@ -1,6 +1,5 @@
 #!/bin/sh
 
-LOGFILE=/var/log/shucampus.log
 PIDFILE=/var/run/shucampus_index
 UPTIME_FILE=/var/run/shucampus_uptime
 STATE_FILE=/var/run/shucampus_state
@@ -39,6 +38,8 @@ SERVICE=$(_uci service)
 PORTAL=$(_uci portal)
 GATEWAY=$(_uci gateway)
 KEEPALIVE=$(_uci keepalive)
+LOGFILE=$(_uci logfile)
+[ -z "$LOGFILE" ] && LOGFILE=/etc/shucampus.log
 # Sanitize: non-numeric -> default; floor 60s so we never hammer the portal
 case "$KEEPALIVE" in
     ''|*[!0-9]*) KEEPALIVE=120 ;;
@@ -67,35 +68,63 @@ reset_backoff() {
 }
 
 # log [LEVEL] message...  (LEVEL defaults to INFO)
-# Rotates the log at ~64KB, keeping the last 200 lines.
+# Rotates the log at ~64KB (keeps the last 200 lines). Everything goes to
+# the log file; WARN/ERROR and non-routine INFO events are also mirrored
+# to syslog so they appear in logread and any configured persistent log.
 log() {
     local level=INFO sz
     case "${1:-}" in
-        INFO|WARN|ERROR) level=$1; shift ;;
+        DEBUG|INFO|WARN|ERROR) level=$1; shift ;;
     esac
     sz=$(wc -c < "$LOGFILE" 2>/dev/null || echo 0)
     if [ "${sz:-0}" -gt 65536 ]; then
         tail -n 200 "$LOGFILE" > "$LOGFILE.tmp" 2>/dev/null && mv "$LOGFILE.tmp" "$LOGFILE"
     fi
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >> "$LOGFILE"
+    case "$level" in
+        ERROR) logger -t shucampus -p daemon.err -- "$*" 2>/dev/null ;;
+        WARN)  logger -t shucampus -p daemon.warning -- "$*" 2>/dev/null ;;
+        INFO)
+            case "$*" in
+                "Keepalive OK"*|"QS attempt"*|"retry login"*) : ;;
+                *) logger -t shucampus -p daemon.notice -- "$*" 2>/dev/null ;;
+            esac
+            ;;
+    esac
+    return 0
+}
+
+# First 120 chars of a string with newlines stripped, for one-line logging
+short() {
+    echo "$1" | tr '\r\n' '  ' | cut -c1-120
 }
 
 get_query_string() {
-    local resp qs i
+    local resp qs i rc
     for i in 1 2 3; do
         ip route replace default via "$GATEWAY" dev wan metric 5 2>/dev/null
-        resp=$(curl -s --connect-timeout 5 "http://1.1.1.1/" 2>/dev/null)
+        resp=$(curl -sS --connect-timeout 5 "http://1.1.1.1/" 2>&1)
+        rc=$?
         ip route del default via "$GATEWAY" dev wan metric 5 2>/dev/null
-        qs=$(echo "$resp" | grep -o "index\.jsp?\(.*\)'" | sed "s/index.jsp?//;s/'//")
-        [ -n "$qs" ] && { echo "$qs"; return 0; }
+        if [ $rc -ne 0 ]; then
+            log WARN "QS attempt $i: curl failed (rc=$rc): $(short "$resp")"
+        else
+            qs=$(echo "$resp" | grep -o "index\.jsp?\(.*\)'" | sed "s/index.jsp?//;s/'//")
+            if [ -n "$qs" ]; then
+                log INFO "QS attempt $i: got redirect query string (${#qs} chars)"
+                echo "$qs"
+                return 0
+            fi
+            log WARN "QS attempt $i: no redirect in reply (${#resp} bytes): $(short "$resp")"
+        fi
         [ "$i" -lt 3 ] && sleep 5
     done
     return 1
 }
 
 do_login() {
-    local qs="$1"
-    curl -s --connect-timeout 10 -X POST "$PORTAL/InterFace.do?method=login" \
+    local qs="$1" resp rc
+    resp=$(curl -sS --connect-timeout 10 -X POST "$PORTAL/InterFace.do?method=login" \
         --data-urlencode "userId=$USERNAME" \
         --data-urlencode "password=$PASSWORD" \
         --data-urlencode "service=$SERVICE" \
@@ -103,30 +132,46 @@ do_login() {
         --data-urlencode "operatorPwd=" \
         --data-urlencode "operatorUserId=" \
         --data-urlencode "validcode=" \
-        --data-urlencode "passwordEncrypt=false"
+        --data-urlencode "passwordEncrypt=false" 2>&1)
+    rc=$?
+    [ $rc -ne 0 ] && log ERROR "login request failed (curl rc=$rc): $(short "$resp")"
+    echo "$resp"
+    return $rc
 }
 
 do_keepalive() {
-    local idx="$1"
-    curl -s --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=keepalive" \
-        --data-urlencode "userIndex=$idx"
+    local idx="$1" resp rc
+    resp=$(curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=keepalive" \
+        --data-urlencode "userIndex=$idx" 2>&1)
+    rc=$?
+    [ $rc -ne 0 ] && log ERROR "keepalive request failed (curl rc=$rc): $(short "$resp")"
+    echo "$resp"
+    return $rc
 }
 
 do_logout() {
     local idx="$1"
-    curl -s --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=logout" \
-        --data-urlencode "userIndex=$idx"
+    curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=logout" \
+        --data-urlencode "userIndex=$idx" 2>&1
 }
 
 # Query portal for the session bound to our current WAN IP.
 # Prints userIndex and returns 0 when an active session for USERNAME exists.
 recover_online_session() {
-    local resp uid uidx
+    local resp uid uidx rc
     ip route replace default via "$GATEWAY" dev wan metric 5 2>/dev/null
-    resp=$(curl -s --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=getOnlineUserInfo" \
-        --data-urlencode "userIndex=" 2>/dev/null)
+    resp=$(curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=getOnlineUserInfo" \
+        --data-urlencode "userIndex=" 2>&1)
+    rc=$?
     ip route del default via "$GATEWAY" dev wan metric 5 2>/dev/null
-    echo "$resp" | grep -q '"result":"success"' || return 1
+    if [ $rc -ne 0 ]; then
+        log WARN "adopt check: getOnlineUserInfo curl failed (rc=$rc): $(short "$resp")"
+        return 1
+    fi
+    if ! echo "$resp" | grep -q '"result":"success"'; then
+        log INFO "adopt check: no live session ($(portal_msg "$resp"))"
+        return 1
+    fi
     uid=$(echo "$resp" | grep -o '"userId":"[^"]*"' | head -1 | cut -d'"' -f4)
     uidx=$(echo "$resp" | grep -o '"userIndex":"[^"]*"' | head -1 | cut -d'"' -f4)
     # When USERNAME is configured, only adopt sessions that belong to us
@@ -136,6 +181,7 @@ recover_online_session() {
         echo "$uidx"
         return 0
     fi
+    log INFO "adopt check: session belongs to '$uid', not us"
     return 1
 }
 
@@ -155,6 +201,11 @@ login_once() {
         return 2
     fi
     resp=$(do_login "$qs")
+    if [ -z "$resp" ]; then
+        set_state "auth_failed" "empty response from portal"
+        log ERROR "Login FAIL: portal returned empty response"
+        return 3
+    fi
     user_index=$(echo "$resp" | grep -o '"userIndex":"[^"]*"' | cut -d'"' -f4)
     if [ -n "$user_index" ]; then
         echo "$user_index" > "$PIDFILE"
@@ -164,9 +215,9 @@ login_once() {
         return 0
     else
         msg=$(portal_msg "$resp")
-        [ -z "$msg" ] && msg=$(echo "$resp" | tr -d '\r\n' | cut -c1-120)
+        [ -z "$msg" ] && msg=$(short "$resp")
         set_state "auth_failed" "$msg"
-        log ERROR "Login FAIL: $msg"
+        log ERROR "Login FAIL: $msg (raw: $(short "$resp"))"
         return 3
     fi
 }
@@ -255,7 +306,7 @@ daemon_loop() {
         else
             msg=$(portal_msg "$ka")
             set_state "offline" "$msg"
-            log WARN "Keepalive FAIL: ${msg:-$ka}"
+            log WARN "Keepalive FAIL: ${msg:-no message} (raw: $(short "$ka"))"
             idx=""
             rm -f "$PIDFILE" "$UPTIME_FILE"
             # loop back to login; the backoff ladder limits request rate

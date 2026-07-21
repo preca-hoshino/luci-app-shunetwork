@@ -47,7 +47,11 @@ function index()
 end
 
 local CORE = "/usr/bin/shucampus_core.sh"
-local LOGFILE = "/var/log/shucampus.log"
+
+local function logfile()
+    local uci = require "luci.model.uci".cursor()
+    return uci:get("shucampus", "@campus[0]", "logfile") or "/etc/shucampus.log"
+end
 
 function action_status()
     http.prepare_content("application/json")
@@ -56,7 +60,7 @@ end
 
 function action_log()
     http.prepare_content("text/plain; charset=utf-8")
-    http.write(luci.sys.exec("tail -n 300 " .. LOGFILE .. " 2>/dev/null"))
+    http.write(luci.sys.exec("tail -n 300 " .. logfile() .. " 2>/dev/null"))
 end
 
 -- Network interface data for the info page.
@@ -97,7 +101,7 @@ function action_ifstatus()
 end
 
 function action_log_clear()
-    luci.sys.call(": > " .. LOGFILE .. " 2>/dev/null")
+    luci.sys.call(": > " .. logfile() .. " 2>/dev/null")
     http.prepare_content("application/json")
     http.write('{"result":"ok"}')
 end

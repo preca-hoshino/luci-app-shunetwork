@@ -69,6 +69,11 @@ keepalive.rmempty = false
 keepalive.datatype = "and(uinteger,min(60),max(600))"
 keepalive.default = "120"
 
+logfile = t:taboption("network", Value, "logfile", translate("Log File"),
+    translate("Path of the daemon log file. A path under /etc/ persists across reboots; /var/log/ is lost on reboot."))
+logfile.rmempty = false
+logfile.default = "/etc/shucampus.log"
+
 -- Apply immediately on save:
 --   enable  -> (re)start the daemon (it resumes/adopts/logs in)
 --   disable -> log the portal session out, then stop the daemon,
