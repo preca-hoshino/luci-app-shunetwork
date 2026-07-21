@@ -23,19 +23,6 @@
 - **Dual-WAN setups** with campus network + PPPoE on the same physical port
 - **Unattended operation** requiring automatic reconnection after power cycles or network outages
 
-### Comparison
-
-| Feature | shunetwork | [shu-auto-net](https://github.com/DongZhouGu/shu-auto-net) |
-|---------|-----------|-----------------------------------------------------------|
-| Platform | OpenWrt LuCI | Linux shell + cron |
-| Auth protocol | Ruijie SAM+ Portal v2 | Ruijie SAM+ Portal v2 |
-| Keepalive | Built-in daemon, configurable interval | Cron-based polling |
-| State machine | 9-state with status reporting | None |
-| Failure backoff | Exponential (30s–600s) | Fixed interval |
-| Session recovery | Adopt existing sessions | Always re-login |
-| Web UI | Full LuCI (settings/info/logs) | None |
-| Architecture | `all` ipk, POSIX shell | Python |
-
 ---
 
 ## Features
