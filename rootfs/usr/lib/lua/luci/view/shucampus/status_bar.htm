@@ -10,8 +10,14 @@ Integrated status card: toggle, interface info, auth state, action buttons.
         </div>
         <hr style="margin:0;opacity:0.3">
         <div style="padding:8px 12px 12px">
-            <p id="shu_interface_info" style="margin:4px 0;min-height:1.4em"></p>
-            <p id="shu_auth_info" style="margin:4px 0;min-height:1.4em"></p>
+            <p style="margin:4px 0;min-height:1.4em">
+                <strong><%:Interface Status%>:</strong>
+                <span id="shu_interface_value"></span>
+            </p>
+            <p style="margin:4px 0;min-height:1.4em">
+                <strong><%:Auth Status%>:</strong>
+                <span id="shu_auth_value"></span>
+            </p>
             <p id="shu_action_buttons" style="margin:4px 0 0;display:flex;gap:6px;flex-wrap:wrap"></p>
         </div>
     </div>
@@ -139,7 +145,7 @@ function shuPollStatus() {
         var toggleEl = document.getElementById('shu_toggle_btn');
         if (toggleEl) toggleEl.innerHTML = shuRenderToggle(s.enabled);
 
-        var authEl = document.getElementById('shu_auth_info');
+        var authEl = document.getElementById('shu_auth_value');
         if (authEl) authEl.innerHTML = shuRenderAuth(s);
 
         var actionsEl = document.getElementById('shu_action_buttons');
@@ -148,7 +154,7 @@ function shuPollStatus() {
 
     XHR.get(SHU_API + '/ifstatus', null, function(x) {
         var iface = shuParse(x);
-        var ifaceEl = document.getElementById('shu_interface_info');
+        var ifaceEl = document.getElementById('shu_interface_value');
         if (ifaceEl) ifaceEl.innerHTML = shuRenderInterface(iface);
     });
 }

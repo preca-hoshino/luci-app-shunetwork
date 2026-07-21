@@ -165,6 +165,12 @@ msgstr "重启"
 msgid "Interface Offline"
 msgstr "接口未连接"
 
+msgid "Interface Status"
+msgstr "接口状态"
+
+msgid "Auth Status"
+msgstr "认证状态"
+
 # ---- Interface info page ----
 msgid "Ruijie SAM+ portal authentication client."
 msgstr "锐捷 SAM+ Portal 认证客户端"
