@@ -81,7 +81,8 @@ _setup_interface() {
     pppoe_route=$(ip route show default | grep pppoe-wan | head -1)
     if [ -z "$pppoe_route" ]; then
         local pgw
-        pgw=$(ubus call network.interface.wan status 2>/dev/null | grep -o '"nexthop":"[^"]*"' | head -1 | cut -d'"' -f4)
+        pgw=$(ubus call network.interface.wan status 2>/dev/null | grep -o '"nexthop":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+        [ -z "$pgw" ] && pgw=$(ip route show table all | grep pppoe-wan | awk '/via/{print $3; exit}')
         [ -n "$pgw" ] && pppoe_route="default via $pgw dev pppoe-wan"
     fi
 
@@ -110,30 +111,6 @@ _setup_interface() {
     fi
 
     ip route replace "$target/$mask" via "$gw" dev wan metric 100 2>/dev/null
-
-    local idx=0 count=0
-    while uci -q get network.@route[$idx] >/dev/null 2>&1; do
-        count=$((idx + 1))
-        idx=$((idx + 1))
-    done
-    idx=$count
-    while [ $idx -gt 0 ]; do
-        idx=$((idx - 1))
-        local t
-        t=$(uci -q get network.@route[$idx].target 2>/dev/null)
-        [ "$t" = "$target" ] && uci delete network.@route[$idx]
-    done
-    uci -q batch <<-EOF
-		add network route
-		set network.@route[-1].interface=$iface
-		set network.@route[-1].target=$target
-		set network.@route[-1].netmask=$(_cidr_to_netmask "$mask")
-		set network.@route[-1].gateway=$gw
-	EOF
-    uci commit network
-
-    _setup_firewall
-}
 
     local idx=0 count=0
     while uci -q get network.@route[$idx] >/dev/null 2>&1; do
