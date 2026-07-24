@@ -66,7 +66,7 @@ status() {
 }
 
 _setup_interface() {
-    local iface gw cidr target mask
+    local iface gw cidr target mask pppoe_route
     config_load shunetwork
     config_get iface settings interface
     config_get gw settings gateway
@@ -78,6 +78,13 @@ _setup_interface() {
     target="${cidr%/*}"
     mask="${cidr#*/}"
 
+    pppoe_route=$(ip route show default | grep pppoe-wan | head -1)
+    if [ -z "$pppoe_route" ]; then
+        local pgw
+        pgw=$(ubus call network.interface.wan status 2>/dev/null | grep -o '"nexthop":"[^"]*"' | head -1 | cut -d'"' -f4)
+        [ -n "$pgw" ] && pppoe_route="default via $pgw dev pppoe-wan"
+    fi
+
     if ! uci -q get network."$iface" >/dev/null 2>&1; then
         uci set network."$iface"=interface
     fi
@@ -85,6 +92,7 @@ _setup_interface() {
 		set network.$iface.device=wan
 		set network.$iface.proto=dhcp
 		set network.$iface.gateway=0.0.0.0
+		set network.$iface.metric=200
 	EOF
     uci commit network
 
@@ -93,7 +101,39 @@ _setup_interface() {
     ifup "$iface" 2>/dev/null
     sleep 5
 
-    ip route replace "$target/$mask" via "$gw" dev wan 2>/dev/null
+    ip route del default dev wan 2>/dev/null || true
+
+    if [ -n "$pppoe_route" ]; then
+        local exists
+        exists=$(ip route show default | grep -c pppoe-wan 2>/dev/null)
+        [ "$exists" = "0" ] && ip route add $pppoe_route 2>/dev/null
+    fi
+
+    ip route replace "$target/$mask" via "$gw" dev wan metric 100 2>/dev/null
+
+    local idx=0 count=0
+    while uci -q get network.@route[$idx] >/dev/null 2>&1; do
+        count=$((idx + 1))
+        idx=$((idx + 1))
+    done
+    idx=$count
+    while [ $idx -gt 0 ]; do
+        idx=$((idx - 1))
+        local t
+        t=$(uci -q get network.@route[$idx].target 2>/dev/null)
+        [ "$t" = "$target" ] && uci delete network.@route[$idx]
+    done
+    uci -q batch <<-EOF
+		add network route
+		set network.@route[-1].interface=$iface
+		set network.@route[-1].target=$target
+		set network.@route[-1].netmask=$(_cidr_to_netmask "$mask")
+		set network.@route[-1].gateway=$gw
+	EOF
+    uci commit network
+
+    _setup_firewall
+}
 
     local idx=0 count=0
     while uci -q get network.@route[$idx] >/dev/null 2>&1; do
@@ -120,14 +160,12 @@ _setup_interface() {
 }
 
 _setup_firewall() {
-    local dev=wan
-    iptables -t nat -C POSTROUTING -o "$dev" -j MASQUERADE 2>/dev/null && return 0
-    iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE 2>/dev/null
+    iptables -t nat -C POSTROUTING -d 10.0.0.0/8 -o wan -j MASQUERADE 2>/dev/null && return 0
+    iptables -t nat -A POSTROUTING -d 10.0.0.0/8 -o wan -j MASQUERADE 2>/dev/null
 }
 
 _teardown_firewall() {
-    local dev=wan
-    iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE 2>/dev/null
+    iptables -t nat -D POSTROUTING -d 10.0.0.0/8 -o wan -j MASQUERADE 2>/dev/null
 }
 
 _cidr_to_netmask() {
