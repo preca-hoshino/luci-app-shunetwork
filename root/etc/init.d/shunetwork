@@ -100,6 +100,9 @@ _setup_interface() {
 	EOF
     uci commit network
 
+    ifup "$iface" 2>/dev/null
+    sleep 2
+
     if [ "$dev" != "wan" ]; then
         _ensure_device "$dev"
 
