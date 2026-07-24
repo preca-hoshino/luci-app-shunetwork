@@ -103,15 +103,36 @@ _setup_interface() {
 	EOF
     uci commit network
 
-    # Prune ALL stale routes for this target (wrong gateway or duplicate)
-    # and install a single correct one. We iterate with raw uci instead of
-    # config_foreach to avoid stale-cache issues after uci delete.
+    # Install static routes via the campus gateway
+    ip route replace "$target/$mask" via "$gw" dev "$dev" 2>/dev/null
+
+    # Materialise the underlying device (macvlan, veth, etc.) when it
+    # does not exist yet.  Physical interfaces (wan, br-lan) are a no-op.
+    _ensure_device "$dev"
+
+    # When the device is a virtual interface (not managed by netifd) we
+    # run DHCP directly; the netifd-based ifup would fail with NO_DEVICE.
+    if ! ubus call network.interface."$iface" status 2>/dev/null | grep -q '"up": true'; then
+        # Kill any stale udhcpc instance on this device
+        local udhcp_pid
+        udhcp_pid=$(cat /var/run/udhcpc-"$dev".pid 2>/dev/null)
+        [ -n "$udhcp_pid" ] && kill "$udhcp_pid" 2>/dev/null
+
+        udhcpc -i "$dev" -b -p /var/run/udhcpc-"$dev".pid \
+            -s /etc/shunetwork-dhcp.script 2>/dev/null
+        sleep 3
+    fi
+
+    # Ensure routes survive DHCP (udhcpc may replace them)
+    ip route replace "$target/$mask" via "$gw" dev "$dev" 2>/dev/null
+
+    # Install uci route entries for persistence after reboot (not used
+    # for runtime forwarding, but referenced by status / LuCI).
     local idx=0 count=0
     while uci -q get network.@route[$idx] >/dev/null 2>&1; do
         count=$((idx + 1))
         idx=$((idx + 1))
     done
-    # Delete in reverse order so indices stay valid
     idx=$count
     while [ $idx -gt 0 ]; do
         idx=$((idx - 1))
@@ -127,11 +148,6 @@ _setup_interface() {
 		set network.@route[-1].gateway=$gw
 	EOF
     uci commit network
-
-    # Ensure the underlying device exists before ifup (e.g. macvlan)
-    _ensure_device "$dev"
-
-    ifup "$iface" 2>/dev/null || true
 }
 
 # Create the underlying device when it does not exist yet (macvlan, veth,

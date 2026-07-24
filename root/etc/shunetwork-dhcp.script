@@ -1,0 +1,12 @@
+#!/bin/sh
+# Minimal DHCP client callback for netifd-unmanaged interfaces (e.g. macvlan).
+# Called by udhcpc with interface=$1 and action in $1 (bound/renew/deconfig).
+
+case "$1" in
+    bound|renew)
+        ip addr add "$ip/$mask" dev "$interface" 2>/dev/null
+        ;;
+    deconfig)
+        ip addr flush dev "$interface" 2>/dev/null
+        ;;
+esac
