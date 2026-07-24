@@ -18,9 +18,7 @@ _uci() {
 }
 
 _campus_dev() {
-    local dev
-    dev=$(_uci device)
-    echo "${dev:-wan}"
+    echo "wan"
 }
 
 # Persist daemon state for the status API. $1=state, optional $2=portal

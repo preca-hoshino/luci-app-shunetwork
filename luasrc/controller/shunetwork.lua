@@ -69,11 +69,15 @@ function action_ifstatus()
     local util = require "luci.util"
     local uci = require "luci.model.uci".cursor()
     local ifname = uci:get("shunetwork", "@campus[0]", "interface") or "campus"
-    local shu_dev = uci:get("shunetwork", "@campus[0]", "device") or "wan"
     local result = { name = ifname }
 
     local st = util.ubus("network.interface." .. ifname, "status", {})
     if type(st) == "table" and st.up then
+        local addrs = st["ipv4-address"]
+        if type(addrs) == "table" and type(addrs[1]) == "table" then
+            result.ipv4 = addrs[1].address
+        end
+
         local dev = st.l3_device or st.device
         if type(dev) == "string" and #dev > 0 then
             local raw = sys.exec("ip -s -j link show dev " .. dev .. " 2>/dev/null")
@@ -86,23 +90,7 @@ function action_ifstatus()
                 end
             end
         end
-    end
-
-    if shu_dev ~= "wan" and shu_dev ~= "" then
-        local dev_ip = util.trim(util.exec("ip -4 addr show dev " .. shu_dev .. " 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1"))
-        if #dev_ip > 0 then
-            result.ipv4 = dev_ip
-        end
     else
-        if type(st) == "table" and st.up then
-            local addrs = st["ipv4-address"]
-            if type(addrs) == "table" and type(addrs[1]) == "table" then
-                result.ipv4 = addrs[1].address
-            end
-        end
-    end
-
-    if not result.ipv4 then
         result.name = nil
     end
 
