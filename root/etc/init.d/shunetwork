@@ -59,10 +59,12 @@ logout() {
 }
 
 status() {
-    local enabled campus_ip daemon_running pid
+    local enabled campus_ip daemon_running pid dev
     config_load shunetwork
     config_get enabled settings enabled
-    campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
+    config_get dev settings device
+    [ -z "$dev" ] && dev=wan
+    campus_ip=$(ip -4 addr show dev "$dev" 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
     [ -s /var/run/shunetwork.pid ] && pid=$(cat /var/run/shunetwork.pid 2>/dev/null)
     [ -n "$pid" ] && [ -d "/proc/$pid" ] && daemon_running="true" || daemon_running="false"
 
@@ -74,12 +76,14 @@ status() {
 }
 
 _setup_interface() {
-    local iface gw cidr target mask_hex
+    local iface gw cidr target mask_hex dev
     config_load shunetwork
     config_get iface settings interface
     config_get gw settings gateway
     config_get cidr settings cidr
+    config_get dev settings device
     [ -z "$iface" ] && iface=campus
+    [ -z "$dev" ] && dev=wan
     [ -z "$gw" ] && return 1
     [ -z "$cidr" ] && return 1
 
@@ -93,7 +97,7 @@ _setup_interface() {
         uci set network."$iface"=interface
     fi
     uci -q batch <<-EOF
-		set network.$iface.device=wan
+		set network.$iface.device=$dev
 		set network.$iface.proto=dhcp
 		set network.$iface.gateway=0.0.0.0
 	EOF

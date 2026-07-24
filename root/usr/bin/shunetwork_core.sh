@@ -17,6 +17,12 @@ _uci() {
     uci -q get shunetwork.@campus[0]."$1" 2>/dev/null || echo ""
 }
 
+_campus_dev() {
+    local iface
+    iface=$(_uci interface)
+    uci -q get network."${iface:-campus}".device 2>/dev/null || echo "wan"
+}
+
 # Persist daemon state for the status API. $1=state, optional $2=portal
 # message. A state transition without a message clears the previous one
 # (stale messages from an older state are misleading).
@@ -128,10 +134,10 @@ get_query_string() {
             [ "$i" -lt 3 ] && sleep 5 && continue
             return 1
         fi
-        ip route replace default via "$GATEWAY" dev wan metric 5 2>/dev/null
+        ip route replace default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
         resp=$(curl -sS --connect-timeout 5 "http://1.1.1.1/" 2>&1)
         rc=$?
-        ip route del default via "$GATEWAY" dev wan metric 5 2>/dev/null
+        ip route del default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
         route_unlock
         if [ $rc -ne 0 ]; then
             log WARN "QS attempt $i: curl failed (rc=$rc): $(short "$resp")"
@@ -209,11 +215,11 @@ route_unlock() {
 recover_online_session() {
     local resp uid uidx rc
     route_lock || { log WARN "adopt check: route lock busy"; return 1; }
-    ip route replace default via "$GATEWAY" dev wan metric 5 2>/dev/null
+    ip route replace default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
     resp=$(curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=getOnlineUserInfo" \
         --data-urlencode "userIndex=" 2>&1)
     rc=$?
-    ip route del default via "$GATEWAY" dev wan metric 5 2>/dev/null
+    ip route del default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
     route_unlock
     if [ $rc -ne 0 ]; then
         log WARN "adopt check: getOnlineUserInfo curl failed (rc=$rc): $(short "$resp")"
@@ -442,7 +448,7 @@ case "${1:-}" in
         msg=""
         state=""
         daemon_running=false
-        campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
+        campus_ip=$(ip -4 addr show dev "$(_campus_dev)" 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
         # Check via the daemon's own pid file: pgrep -f would match the
         # caller's own shell (its command line contains the pattern too).
         if [ -s "$DPIDFILE" ]; then

@@ -53,6 +53,12 @@ gateway = t:taboption("network", Value, "gateway", translate("Campus Gateway"),
 gateway.rmempty = false
 gateway.datatype = "ip4addr"
 
+device = t:taboption("network", Value, "device", translate("Underlying Device"),
+    translate("Physical or virtual device the campus interface binds to (e.g. wan, campus)"))
+device.rmempty = false
+device:value("wan", "wan (physical port)")
+device:value("campus", "campus (macvlan)")
+
 ifname = t:taboption("network", Value, "interface", translate("Interface Name"),
     translate("Network interface name created in /etc/config/network"))
 ifname.rmempty = false
