@@ -127,17 +127,19 @@ short() {
 }
 
 get_query_string() {
-    local resp qs i rc
+    local resp qs i rc pppoe_default
     for i in 1 2 3; do
         if ! route_lock; then
             log WARN "QS attempt $i: route lock busy, skipped"
             [ "$i" -lt 3 ] && sleep 5 && continue
             return 1
         fi
-        ip route replace default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
+        pppoe_default=$(ip route show default | grep pppoe-wan | head -1)
+        ip route replace default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
         resp=$(curl -sS --connect-timeout 5 "http://1.1.1.1/" 2>&1)
         rc=$?
-        ip route del default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
+        ip route flush default 2>/dev/null
+        [ -n "$pppoe_default" ] && ip route add $pppoe_default 2>/dev/null
         route_unlock
         if [ $rc -ne 0 ]; then
             log WARN "QS attempt $i: curl failed (rc=$rc): $(short "$resp")"
@@ -213,13 +215,15 @@ route_unlock() {
 # Query portal for the session bound to our current WAN IP.
 # Prints userIndex and returns 0 when an active session for USERNAME exists.
 recover_online_session() {
-    local resp uid uidx rc
+    local resp uid uidx rc pppoe_default
     route_lock || { log WARN "adopt check: route lock busy"; return 1; }
-    ip route replace default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
+    pppoe_default=$(ip route show default | grep pppoe-wan | head -1)
+    ip route replace default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
     resp=$(curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=getOnlineUserInfo" \
         --data-urlencode "userIndex=" 2>&1)
     rc=$?
-    ip route del default via "$GATEWAY" dev "$(_campus_dev)" metric 5 2>/dev/null
+    ip route flush default 2>/dev/null
+    [ -n "$pppoe_default" ] && ip route add $pppoe_default 2>/dev/null
     route_unlock
     if [ $rc -ne 0 ]; then
         log WARN "adopt check: getOnlineUserInfo curl failed (rc=$rc): $(short "$resp")"
