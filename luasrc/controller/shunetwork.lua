@@ -63,24 +63,17 @@ function action_log()
     http.write(sys.exec("tail -n 300 " .. LOGFILE .. " 2>/dev/null"))
 end
 
--- Network interface data for the info page.
--- Shows the *logical* campus interface (as named in settings): its own
--- IPv4 from ubus, plus MTU/traffic counters of the underlying device.
 function action_ifstatus()
     http.prepare_content("application/json")
     local json = require "luci.jsonc"
     local util = require "luci.util"
     local uci = require "luci.model.uci".cursor()
     local ifname = uci:get("shunetwork", "@campus[0]", "interface") or "campus"
+    local shu_dev = uci:get("shunetwork", "@campus[0]", "device") or "wan"
     local result = { name = ifname }
 
     local st = util.ubus("network.interface." .. ifname, "status", {})
     if type(st) == "table" and st.up then
-        local addrs = st["ipv4-address"]
-        if type(addrs) == "table" and type(addrs[1]) == "table" then
-            result.ipv4 = addrs[1].address
-        end
-
         local dev = st.l3_device or st.device
         if type(dev) == "string" and #dev > 0 then
             local raw = sys.exec("ip -s -j link show dev " .. dev .. " 2>/dev/null")
@@ -93,8 +86,24 @@ function action_ifstatus()
                 end
             end
         end
+    end
+
+    if shu_dev ~= "wan" and shu_dev ~= "" then
+        local dev_ip = util.trim(util.exec("ip -4 addr show dev " .. shu_dev .. " 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1"))
+        if #dev_ip > 0 then
+            result.ipv4 = dev_ip
+        end
     else
-        result.name = nil   -- interface down: page shows "No interface online."
+        if type(st) == "table" and st.up then
+            local addrs = st["ipv4-address"]
+            if type(addrs) == "table" and type(addrs[1]) == "table" then
+                result.ipv4 = addrs[1].address
+            end
+        end
+    end
+
+    if not result.ipv4 then
+        result.name = nil
     end
 
     http.write(json.stringify(result))

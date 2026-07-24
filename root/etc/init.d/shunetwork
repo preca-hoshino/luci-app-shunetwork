@@ -90,24 +90,19 @@ _setup_interface() {
     target="${cidr%/*}"
     mask="${cidr#*/}"
 
-    # Create the interface when missing — always bind to physical wan so
-    # netifd keeps it up (NO_DEVICE would break the LuCI status page).
     if ! uci -q get network."$iface" >/dev/null 2>&1; then
         uci set network."$iface"=interface
     fi
     uci -q batch <<-EOF
 		set network.$iface.device=wan
-		set network.$iface.proto=dhcp
+		set network.$iface.proto=none
 		set network.$iface.gateway=0.0.0.0
 	EOF
     uci commit network
 
-    # The auth may run on a different underlying device (e.g. campus macvlan)
-    # than the netifd-managed interface.  Ensure that device exists.
     if [ "$dev" != "wan" ]; then
         _ensure_device "$dev"
 
-        # Run DHCP on the auth device if it lacks an IP
         if ! ip -4 addr show dev "$dev" 2>/dev/null | grep -q "inet "; then
             local udhcp_pid
             udhcp_pid=$(cat /var/run/udhcpc-"$dev".pid 2>/dev/null)
@@ -118,7 +113,6 @@ _setup_interface() {
         fi
     fi
 
-    # Install static routes via the campus gateway on the auth device
     ip route replace "$target/$mask" via "$gw" dev "$dev" 2>/dev/null
 
     # Install uci route entries for persistence after reboot (not used
