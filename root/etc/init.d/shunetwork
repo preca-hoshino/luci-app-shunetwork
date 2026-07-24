@@ -51,18 +51,7 @@ logout() {
 }
 
 status() {
-    local enabled campus_ip daemon_running pid
-    config_load shunetwork
-    config_get enabled settings enabled
-    campus_ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
-    [ -s /var/run/shunetwork.pid ] && pid=$(cat /var/run/shunetwork.pid 2>/dev/null)
-    [ -n "$pid" ] && [ -d "/proc/$pid" ] && daemon_running="true" || daemon_running="false"
-
-    printf '{"enabled":"%s","campus_ip":"%s","daemon_running":%s' \
-        "${enabled:-0}" "${campus_ip:-}" "$daemon_running"
-    [ -n "$pid" ] && printf ',"pid":"%s"' "$pid"
-    printf ',"uptime":"%s"' "$(cat /var/run/shunetwork_uptime 2>/dev/null)"
-    printf '}\n'
+    $CORE status
 }
 
 _setup_interface() {
@@ -100,7 +89,16 @@ _setup_interface() {
     ifdown "$iface" 2>/dev/null
     sleep 1
     ifup "$iface" 2>/dev/null
-    sleep 5
+
+    # Wait up to 30 seconds for DHCP to assign a 10.x.x.x campus address
+    local wait=0
+    while [ $wait -lt 30 ]; do
+        local ip
+        ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
+        [ -n "$ip" ] && break
+        sleep 2
+        wait=$((wait + 2))
+    done
 
     ip route del default dev wan 2>/dev/null || true
 

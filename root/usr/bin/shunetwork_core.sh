@@ -12,6 +12,9 @@ ROUTE_LOCK=/var/run/shunetwork_route.lock
 # Written by the 'logout' command: while present the daemon stays offline
 # on purpose (manual disconnect). Cleared by login / service start / reboot.
 SUPPRESS_FILE=/var/run/shunetwork_suppress
+# Written by login_once / recover_online_session. Compared against the live
+# campus address before every keepalive. A mismatch triggers re-auth.
+LOGIN_IP_FILE=/var/run/shunetwork_login_ip
 
 _uci() {
     uci -q get shunetwork.@campus[0]."$1" 2>/dev/null || echo ""
@@ -19,6 +22,10 @@ _uci() {
 
 _campus_dev() {
     echo "wan"
+}
+
+_campus_ip() {
+    ip -4 addr show dev "$(_campus_dev)" 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1
 }
 
 # Persist daemon state for the status API. $1=state, optional $2=portal
@@ -134,7 +141,7 @@ get_query_string() {
         fi
         pppoe_default=$(ip route show default | grep pppoe-wan | head -1)
         ip route replace default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
-        resp=$(curl -sS --connect-timeout 5 "http://1.1.1.1/" 2>&1)
+        resp=$(curl -sS -L --max-redirs 3 --connect-timeout 5 "http://1.1.1.1/" 2>&1)
         rc=$?
         ip route flush default 2>/dev/null
         [ -n "$pppoe_default" ] && ip route add $pppoe_default 2>/dev/null
@@ -237,6 +244,7 @@ recover_online_session() {
     if [ -n "$uidx" ] && { [ -z "$USERNAME" ] || [ "$uid" = "$USERNAME" ]; }; then
         echo "$uidx" > "$PIDFILE"
         [ -s "$UPTIME_FILE" ] || date '+%s' > "$UPTIME_FILE"
+        _campus_ip > "$LOGIN_IP_FILE"
         echo "$uidx"
         return 0
     fi
@@ -271,6 +279,7 @@ login_once() {
     if [ -n "$user_index" ]; then
         echo "$user_index" > "$PIDFILE"
         date '+%s' > "$UPTIME_FILE"
+        _campus_ip > "$LOGIN_IP_FILE"
         set_state "online"
         log INFO "Login OK  userIndex=${user_index}"
         return 0
@@ -306,7 +315,7 @@ daemon_loop() {
             else
                 log WARN "Previous session expired"
                 idx=""
-                rm -f "$PIDFILE" "$UPTIME_FILE"
+                rm -f "$PIDFILE" "$UPTIME_FILE" "$LOGIN_IP_FILE"
             fi
         fi
 
@@ -328,11 +337,38 @@ daemon_loop() {
             if [ -n "$idx" ]; then
                 do_logout "$idx" >/dev/null 2>&1
                 idx=""
-                rm -f "$PIDFILE" "$UPTIME_FILE"
+                rm -f "$PIDFILE" "$UPTIME_FILE" "$LOGIN_IP_FILE"
             fi
             set_state "suppressed"
             sleep 30
             continue
+        fi
+
+        # Interface health: without a 10.x.x.x campus IP, keepalive/login
+        # would be pointless.  DHCP renew may also produce a new address,
+        # caught by the consistency check below.
+        current_ip=$(_campus_ip)
+        if [ -z "$current_ip" ]; then
+            if [ -n "$idx" ]; then
+                idx=""
+                rm -f "$PIDFILE" "$UPTIME_FILE" "$LOGIN_IP_FILE"
+            fi
+            set_state "offline" "no campus IP (DHCP may have failed)"
+            sleep 30
+            continue
+        fi
+
+        # IP consistency: the portal embeds the client IP in userIndex.
+        # If the campus address changed mid-session, every keepalive would
+        # return "源Ip和在线用户的ip不一致".  Catch it here proactively.
+        if [ -n "$idx" ] && [ -s "$LOGIN_IP_FILE" ]; then
+            read -r login_ip < "$LOGIN_IP_FILE"
+            if [ "$current_ip" != "$login_ip" ]; then
+                log WARN "Campus IP changed: $login_ip -> $current_ip, re-auth"
+                do_logout "$idx" >/dev/null 2>&1
+                idx=""
+                rm -f "$PIDFILE" "$UPTIME_FILE" "$LOGIN_IP_FILE"
+            fi
         fi
 
         if [ -z "$idx" ]; then
@@ -374,6 +410,16 @@ daemon_loop() {
             log INFO "Keepalive OK"
         else
             msg=$(portal_msg "$ka")
+            # IP mismatch: the source address changed since login, so the
+            # portal rejects our userIndex.  Skip backoff and re-auth now.
+            case "$msg" in
+                *"不一致"*)
+                    log WARN "Keepalive FAIL: IP mismatch, re-auth"
+                    idx=""
+                    rm -f "$PIDFILE" "$UPTIME_FILE" "$LOGIN_IP_FILE"
+                    continue
+                    ;;
+            esac
             set_state "offline" "$msg"
             log WARN "Keepalive FAIL: ${msg:-no message} (raw: $(short "$ka"))"
             idx=""
@@ -430,7 +476,7 @@ case "${1:-}" in
     logout)
         idx=$(cat "$PIDFILE" 2>/dev/null)
         [ -n "$idx" ] && do_logout "$idx" >/dev/null 2>&1
-        rm -f "$PIDFILE" "$UPTIME_FILE" "$STATE_FILE" "$MSG_FILE"
+        rm -f "$PIDFILE" "$UPTIME_FILE" "$STATE_FILE" "$MSG_FILE" "$LOGIN_IP_FILE"
         date +%s > "$SUPPRESS_FILE"
         set_state "suppressed"
         log INFO "Logged out (manual disconnect, auto-reconnect suppressed)"
@@ -476,6 +522,23 @@ case "${1:-}" in
         fi
 
         [ -s "$MSG_FILE" ] && read -r msg < "$MSG_FILE"
+
+        # Cross-check: if the daemon thinks it's online but the login IP
+        # doesn't match the current campus address, flag the stale state.
+        if [ "$state" = "online" ]; then
+            if [ -s "$LOGIN_IP_FILE" ]; then
+                read -r login_ip < "$LOGIN_IP_FILE"
+                if [ -n "$login_ip" ] && [ "$login_ip" != "${campus_ip:-}" ]; then
+                    state="ip_changed"
+                    msg="campus IP changed: $login_ip -> ${campus_ip:-none}"
+                fi
+            else
+                # Session exists but we have no record of which IP we logged
+                # in with — treat as suspicious but not necessarily wrong.
+                :
+            fi
+        fi
+
         [ -s "$UPTIME_FILE" ] && read -r uptime < "$UPTIME_FILE" && uptime=$(date -d "@$uptime" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
 
         printf '{"enabled":"%s","daemon_running":%s,"state":"%s","campus_ip":"%s"' \
