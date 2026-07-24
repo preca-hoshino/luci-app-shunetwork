@@ -18,9 +18,9 @@ _uci() {
 }
 
 _campus_dev() {
-    local iface
-    iface=$(_uci interface)
-    uci -q get network."${iface:-campus}".device 2>/dev/null || echo "wan"
+    local dev
+    dev=$(_uci device)
+    echo "${dev:-wan}"
 }
 
 # Persist daemon state for the status API. $1=state, optional $2=portal

@@ -90,40 +90,35 @@ _setup_interface() {
     target="${cidr%/*}"
     mask="${cidr#*/}"
 
-    # Create the interface when missing, and always enforce the critical
-    # fields: a stale hand-made config (e.g. device=campus -> NO_DEVICE)
-    # silently breaks DHCP and the whole auth chain.
+    # Create the interface when missing — always bind to physical wan so
+    # netifd keeps it up (NO_DEVICE would break the LuCI status page).
     if ! uci -q get network."$iface" >/dev/null 2>&1; then
         uci set network."$iface"=interface
     fi
     uci -q batch <<-EOF
-		set network.$iface.device=$dev
+		set network.$iface.device=wan
 		set network.$iface.proto=dhcp
 		set network.$iface.gateway=0.0.0.0
 	EOF
     uci commit network
 
-    # Install static routes via the campus gateway
-    ip route replace "$target/$mask" via "$gw" dev "$dev" 2>/dev/null
+    # The auth may run on a different underlying device (e.g. campus macvlan)
+    # than the netifd-managed interface.  Ensure that device exists.
+    if [ "$dev" != "wan" ]; then
+        _ensure_device "$dev"
 
-    # Materialise the underlying device (macvlan, veth, etc.) when it
-    # does not exist yet.  Physical interfaces (wan, br-lan) are a no-op.
-    _ensure_device "$dev"
-
-    # When the device is a virtual interface (not managed by netifd) we
-    # run DHCP directly; the netifd-based ifup would fail with NO_DEVICE.
-    if ! ubus call network.interface."$iface" status 2>/dev/null | grep -q '"up": true'; then
-        # Kill any stale udhcpc instance on this device
-        local udhcp_pid
-        udhcp_pid=$(cat /var/run/udhcpc-"$dev".pid 2>/dev/null)
-        [ -n "$udhcp_pid" ] && kill "$udhcp_pid" 2>/dev/null
-
-        udhcpc -i "$dev" -b -p /var/run/udhcpc-"$dev".pid \
-            -s /etc/shunetwork-dhcp.script 2>/dev/null
-        sleep 3
+        # Run DHCP on the auth device if it lacks an IP
+        if ! ip -4 addr show dev "$dev" 2>/dev/null | grep -q "inet "; then
+            local udhcp_pid
+            udhcp_pid=$(cat /var/run/udhcpc-"$dev".pid 2>/dev/null)
+            [ -n "$udhcp_pid" ] && kill "$udhcp_pid" 2>/dev/null
+            udhcpc -i "$dev" -b -p /var/run/udhcpc-"$dev".pid \
+                -s /etc/shunetwork-dhcp.script 2>/dev/null
+            sleep 3
+        fi
     fi
 
-    # Ensure routes survive DHCP (udhcpc may replace them)
+    # Install static routes via the campus gateway on the auth device
     ip route replace "$target/$mask" via "$gw" dev "$dev" 2>/dev/null
 
     # Install uci route entries for persistence after reboot (not used
