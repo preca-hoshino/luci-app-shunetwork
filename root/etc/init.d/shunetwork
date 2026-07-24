@@ -90,11 +90,11 @@ _setup_interface() {
     sleep 1
     ifup "$iface" 2>/dev/null
 
-    # Wait up to 30 seconds for DHCP to assign a 10.x.x.x campus address
-    local wait=0
+    # Wait up to 30 seconds for DHCP to assign a campus address matching CIDR
+    local wait=0 cidr_first="${cidr%%.*}"
     while [ $wait -lt 30 ]; do
         local ip
-        ip=$(ip -4 addr show dev wan 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
+        ip=$(ip -4 addr show dev wan 2>/dev/null | awk -v f="$cidr_first" 'index($2, f".") == 1{print $2}' | cut -d/ -f1)
         [ -n "$ip" ] && break
         sleep 2
         wait=$((wait + 2))
@@ -157,7 +157,7 @@ _cidr_to_netmask() {
             result="${result}255"
             mask=$((mask - 8))
         elif [ "$mask" -gt 0 ]; then
-            result="${result}$((256 - 2^(8-mask)))"
+            result="${result}$((256 - (1 << (8 - mask))))"
             mask=0
         else
             result="${result}0"

@@ -25,7 +25,11 @@ _campus_dev() {
 }
 
 _campus_ip() {
-    ip -4 addr show dev "$(_campus_dev)" 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1
+    local cidr first
+    cidr=$(_uci cidr)
+    [ -z "$cidr" ] && cidr="10.0.0.0/8"
+    first="${cidr%%.*}"
+    ip -4 addr show dev "$(_campus_dev)" 2>/dev/null | awk -v f="$first" 'index($2, f".") == 1{print $2}' | cut -d/ -f1
 }
 
 # Persist daemon state for the status API. $1=state, optional $2=portal
@@ -42,7 +46,7 @@ set_state() {
 }
 
 json_escape() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    printf '%s' "$1" | tr '\n\r\t' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 reload_config() {
@@ -61,6 +65,7 @@ reload_config() {
         ''|*[!0-9]*) KEEPALIVE=120 ;;
     esac
     [ "$KEEPALIVE" -lt 60 ] && KEEPALIVE=60
+    [ "$KEEPALIVE" -gt 600 ] && KEEPALIVE=600
 }
 
 # Missing credentials make every login attempt pointless - report once
@@ -132,19 +137,17 @@ short() {
 }
 
 get_query_string() {
-    local resp qs i rc pppoe_default
+    local resp qs i rc
     for i in 1 2 3; do
         if ! route_lock; then
             log WARN "QS attempt $i: route lock busy, skipped"
             [ "$i" -lt 3 ] && sleep 5 && continue
             return 1
         fi
-        pppoe_default=$(ip route show default | grep pppoe-wan | head -1)
         ip route replace default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
         resp=$(curl -sS -L --max-redirs 3 --connect-timeout 5 "http://1.1.1.1/" 2>&1)
         rc=$?
-        ip route flush default 2>/dev/null
-        [ -n "$pppoe_default" ] && ip route add $pppoe_default 2>/dev/null
+        ip route del default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
         route_unlock
         if [ $rc -ne 0 ]; then
             log WARN "QS attempt $i: curl failed (rc=$rc): $(short "$resp")"
@@ -201,7 +204,7 @@ do_logout() {
 route_lock() {
     local n=0 age
     while ! mkdir "$ROUTE_LOCK" 2>/dev/null; do
-        age=$(( $(date +%s) - $(stat -c%Y "$ROUTE_LOCK" 2>/dev/null || echo 0) ))
+        age=$(( $(date +%s) - $(date -r "$ROUTE_LOCK" +%s 2>/dev/null || echo 0) ))
         if [ "$age" -gt 60 ]; then
             rm -rf "$ROUTE_LOCK"
             continue
@@ -220,15 +223,13 @@ route_unlock() {
 # Query portal for the session bound to our current WAN IP.
 # Prints userIndex and returns 0 when an active session for USERNAME exists.
 recover_online_session() {
-    local resp uid uidx rc pppoe_default
+    local resp uid uidx rc
     route_lock || { log WARN "adopt check: route lock busy"; return 1; }
-    pppoe_default=$(ip route show default | grep pppoe-wan | head -1)
     ip route replace default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
     resp=$(curl -sS --connect-timeout 5 -X POST "$PORTAL/InterFace.do?method=getOnlineUserInfo" \
         --data-urlencode "userIndex=" 2>&1)
     rc=$?
-    ip route flush default 2>/dev/null
-    [ -n "$pppoe_default" ] && ip route add $pppoe_default 2>/dev/null
+    ip route del default via "$GATEWAY" dev "$(_campus_dev)" 2>/dev/null
     route_unlock
     if [ $rc -ne 0 ]; then
         log WARN "adopt check: getOnlineUserInfo curl failed (rc=$rc): $(short "$resp")"
@@ -449,7 +450,7 @@ case "${1:-}" in
         # logins against the portal. mkdir is atomic (unlike test+touch,
         # which has a TOCTOU race). Lock is valid for 60s.
         if ! mkdir "$LOGIN_LOCK" 2>/dev/null; then
-            lock_age=$(( $(date +%s) - $(stat -c%Y "$LOGIN_LOCK" 2>/dev/null || echo 0) ))
+            lock_age=$(( $(date +%s) - $(date -r "$LOGIN_LOCK" +%s 2>/dev/null || echo 0) ))
             if [ "$lock_age" -lt 60 ]; then
                 echo "login already in progress"
                 exit 1
@@ -496,7 +497,7 @@ case "${1:-}" in
         msg=""
         state=""
         daemon_running=false
-        campus_ip=$(ip -4 addr show dev "$(_campus_dev)" 2>/dev/null | awk '/inet 10\./{print $2}' | cut -d/ -f1)
+        campus_ip=$(_campus_ip)
         # Check via the daemon's own pid file: pgrep -f would match the
         # caller's own shell (its command line contains the pattern too).
         if [ -s "$DPIDFILE" ]; then
